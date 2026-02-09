@@ -1,0 +1,98 @@
+\documentclass[11pt]{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage[tmargin=20mm,bmargin=35mm,lmargin=20mm,rmargin=20mm]{geometry}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english, spanish, es-noindentfirst, es-tabla]{babel}
+\decimalpoint
+\usepackage{amsmath,amssymb,lmodern,amsfonts} 
+\usepackage{bm,latexsym,amsmath,amssymb,amsfonts,mathrsfs}
+\usepackage{float}
+\usepackage{mathtools}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage{braket}
+\usepackage{multirow}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{lastpage}
+\usepackage{titling}
+\usepackage[colorlinks=true,bookmarksopen,bookmarksnumbered,linktocpage]{hyperref}
+
+\title{\textbf{Cronograma de Proyecto: Simulación de Confinamiento de Plasma}}
+\author{%
+  Juan Mena \\
+  Stiven\\
+  Aplicaciones Computacionales a Problemas Físicos \\
+  \textbf{Grupo:} F1
+} 
+\date{\today}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{1.0pt}
+\renewcommand{\footrulewidth}{1.0pt}
+\renewcommand{\footruleskip}{-10pt}
+\setlength{\headheight}{2cm}
+\lhead{\includegraphics[height=1.5cm]{UIS.png}}
+\chead{Universidad Industrial de Santander\\
+Escuela de Física}
+\rhead{\includegraphics[height=1.5cm]{NewLogo.jpg}}
+
+\hypersetup{linkcolor=blue}
+\hypersetup{citecolor=red}
+
+\renewcommand{\thesection}{\Roman{section}} 
+\renewcommand{\thesubsection}{\thesection.\Roman{subsection}}
+\hyphenpenalty=10000
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\section{Descripción del Proyecto}
+El proyecto consiste en la simulación del confinamiento de plasma mediante un campo electromagnético utilizando Python. Se modelará el movimiento de partículas bajo la fuerza de Lorentz, integrando las ecuaciones diferenciales mediante el algoritmo de Boris o Runge-Kutta. El sistema incluirá colisiones aleatorias (modelo estocástico) y se empleará el método de Monte Carlo para calcular el tiempo de confinamiento promedio, analizando la pérdida de partículas en las paredes del contenedor. La visualización se realizará mediante animaciones con Matplotlib.
+
+\section{Cronograma de Actividades (15 Semanas)}
+
+A continuación se presenta la distribución detallada de tareas para dos personas. Se ha utilizado un formato de tabla que asegura que el contenido se ajuste al ancho de la página y se han incluido bordes laterales.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{|@{}c|X|X|@{}}
+\toprule
+\textbf{Sem.} & \textbf{Persona 1: Física y Algoritmos} & \textbf{Persona 2: Desarrollo y Análisis} \\ \midrule
+\textbf{1} & Investigación teórica sobre la Fuerza de Lorentz y el Algoritmo de Boris (preservación de energía). & Configuración del repositorio y entorno virtual. Creación de la estructura base del proyecto. \\ \midrule
+\textbf{2} & Implementación del integrador de Boris en Python para una sola partícula. & Creación de la clase \texttt{Particula} con atributos de posición, velocidad y carga. \\ \midrule
+\textbf{3} & Definición de funciones para campos magnéticos (solenoide) y eléctricos constantes. & Implementación de la geometría del contenedor y lógica de detección de fronteras. \\ \midrule
+\textbf{4} & Pruebas de trayectorias helicoidales y validación física de los radios de Larmor. & Implementación de logs de datos para registrar la posición de la partícula en cada paso. \\ \midrule
+\textbf{5} & Desarrollo del modelo estocástico para representar colisiones mediante procesos estadísticos. & Implementación de la distribución de Maxwell-Boltzmann para velocidades iniciales. \\ \midrule
+\textbf{6} & Programación de la redistribución aleatoria de la velocidad tras una colisión. & Integración de eventos de colisión en el flujo principal de la simulación. \\ \midrule
+\textbf{7} & Optimización del algoritmo de integración para manejar múltiples partículas simultáneamente. & Configuración inicial del método Monte Carlo para el seguimiento de múltiples hilos. \\ \midrule
+\textbf{8} & Análisis del error numérico en tiempos largos de simulación (deriva de energía). & Implementación de contadores de partículas perdidas en las paredes del contenedor. \\ \midrule
+\textbf{9} & Configuración de la visualización básica con \texttt{matplotlib.animation} para trayectorias. & Registro sistemático de tiempos de escape para el cálculo de estadísticas. \\ \midrule
+\textbf{10} & Mejora de la animación: renderizado en 3D del contenedor y el plasma en evolución. & Cálculo del tiempo de confinamiento promedio mediante el análisis Monte Carlo. \\ \midrule
+\textbf{11} & Realización de simulaciones variando la intensidad del campo B para ver su efecto en el confinamiento. & Procesamiento de datos masivos y generación de gráficas de resultados (Histogramas). \\ \midrule
+\textbf{12} & Análisis de sensibilidad: variación de la presión/densidad y su efecto en la frecuencia de colisión. & Automatización de múltiples corridas con diferentes parámetros de entrada. \\ \midrule
+\textbf{13} & Optimización avanzada del código (vectorización con NumPy) para aumentar el número de partículas. & Generación de mapas de calor de densidad de partículas y flujos en las paredes. \\ \midrule
+\textbf{14} & Revisión integral de los resultados físicos y validación con modelos teóricos de confinamiento. & Finalización de todos los módulos de análisis y exportación de visualizaciones de alta calidad. \\ \midrule
+\textbf{15} & Corrección final de errores y redacción de la sección de conclusiones físicas del proyecto. & Consolidación final del informe técnico y preparación de los archivos de simulación. \\ \bottomrule
+\end{tabularx}
+\caption{Cronograma detallado de entregables y responsabilidades semanales.}
+\end{table}
+
+\section{Fechas de Posibles Entregables}
+\begin{enumerate}
+    \item \textbf{Primer Entregable (Semana 4 - 6 de marzo de 2026):} Trayectorias individuales validadas físicamente y motor de integración Boris funcional.
+    \item \textbf{Segundo Entregable (Semana 10 - 17 de abril de 2026):} Simulación Monte Carlo funcional con estadísticas preliminares de confinamiento y colisiones estocásticas.
+    \item \textbf{Entrega Final (Semana 15 - 22 de mayo de 2026):} Proyecto finalizado con animaciones 3D, análisis completo de datos, histogramas y entrega del informe técnico.
+\end{enumerate}
+
+\section{Metodología de Trabajo}
+Se utilizará un repositorio Git para el control de versiones. Las reuniones de sincronización se realizarán semanalmente para integrar los módulos de física de la Persona 1 con el entorno de simulación desarrollado por la Persona 2.
+
+\end{document}
