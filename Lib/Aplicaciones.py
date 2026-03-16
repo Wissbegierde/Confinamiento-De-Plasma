@@ -10,6 +10,7 @@ from particulas import Particula
 from interacciones import calcular_E_interaccion
 from campos import campo_electrico_constante, campo_magnetico_solenoide
 from contenedor import ContenedorCilindrico
+from colisiones import ColisionEstocastica, velocidad_inicial_mb  
 
 # Forzar backend interactivo para que abra la ventana
 matplotlib.use('TkAgg')
@@ -95,13 +96,28 @@ pasos = 800
 pausado = True
 frame_actual = 0
 
+# Parámetros físicos
 p_radio = 0.5
 B0 = 1.0
 E0 = (0.0, 0.0, 0.0)
+m_particula = 1e-9          # masa [kg]
+q_particula = 1e-6          # carga [C]
+T_plasma = 1e4              # temperatura del plasma [K]   
+nu_colision = 500.0         # frecuencia de colisión [Hz]  
+
 contenedor = ContenedorCilindrico(radio=p_radio)
 
-p1 = Particula(1, q=1e-6, m=1e-9, x0=[-0.05, 0, 0], v0=[0, 0, 0])
-p2 = Particula(2, q=1e-6, m=1e-9, x0=[0.05, 0, 0], v0=[0, 0, 0])
+# Velocidades iniciales distribuidas según Maxwell-Boltzmann
+rng_global = np.random.default_rng(42)
+v0_p1 = velocidad_inicial_mb(m_particula, T_plasma, rng=rng_global)
+v0_p2 = velocidad_inicial_mb(m_particula, T_plasma, rng=rng_global)
+
+p1 = Particula(1, q=q_particula, m=m_particula, x0=[-0.05, 0, 0], v0=v0_p1)
+p2 = Particula(2, q=q_particula, m=m_particula, x0=[ 0.05, 0, 0], v0=v0_p2)
+
+# Modelos estocásticos de colisión, uno por partícula
+col1 = ColisionEstocastica(nu=nu_colision, m=m_particula, T=T_plasma, dt=dt, seed=1)
+col2 = ColisionEstocastica(nu=nu_colision, m=m_particula, T=T_plasma, dt=dt, seed=2)
 
 # Pre-cálculo
 for _ in range(pasos):
@@ -121,6 +137,10 @@ for _ in range(pasos):
     x1, v1 = boris_step(p1.x, p1.v, E1, B1, p1.q, p1.m, dt)
     x2, v2 = boris_step(p2.x, p2.v, E2, B2, p2.q, p2.m, dt)
 
+    # Colisión estocástica: redistribución de velocidad (Semana 5)
+    v1, _ = col1.aplicar(v1)
+    v2, _ = col2.aplicar(v2)
+
     # Detección de colisión con la pared del contenedor
     if not contenedor.esta_dentro(x1):
         x1 = contenedor.proyectar_a_frontera(x1)
@@ -131,6 +151,9 @@ for _ in range(pasos):
 
     p1.actualizar_estado(x1, v1)
     p2.actualizar_estado(x2, v2)
+
+print(col1.resumen())
+print(col2.resumen())
 
 guardar_logs_trayectorias(p1, p2, dt)
 prueba_trayectoria_helicoidal()
