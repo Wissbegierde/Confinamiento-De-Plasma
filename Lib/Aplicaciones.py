@@ -1,202 +1,325 @@
+"""
+Aplicaciones.py — Main del simulador PIC 3D
+============================================
+- Selección de especies (electrón, protón, helio, deuterio...)
+- Selección de geometría del contenedor
+- Caché de campos externos en disco (.npy) → no se recalculan
+- Visualización 3D interactiva (sin RecursionError)
+  · Slider de progreso
+  · Play / Pausa  (Espacio)
+  · Frame a frame  (← →)
+  · Velocidad      (+ / -)
+"""
+
 import os
-
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+
 import matplotlib
+for _b in ('Qt5Agg', 'TkAgg', 'Agg'):
+    try:
+        matplotlib.use(_b); break
+    except Exception:
+        continue
 
-from integradores import boris_step
-from particulas import Particula
-from interacciones import calcular_E_interaccion
-from campos import campo_electrico_constante, campo_magnetico_solenoide
-from contenedor import ContenedorCilindrico
-from colisiones import ColisionEstocastica, velocidad_inicial_mb  
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from matplotlib.widgets import Slider, Button
+from mpl_toolkits.mplot3d import Axes3D
 
-# Forzar backend interactivo para que abra la ventana
-matplotlib.use('TkAgg')
+from motor import motor_simulacion, _configurar_rejilla
+from tools import guardar_logs_trayectorias
+from contenedor import (
+    ContenedorCilindrico, ContenedorEsferico,
+    ContenedorCaja, ContenedorPlacasParalelas, ContenedorTokamak
+)
+import campos as campos_mod
+from visualizacion import lanzar_visualizacion
+import montecarlo as mc
 
 
-def guardar_logs_trayectorias(p1, p2, dt, carpeta_salida="data"):
-    os.makedirs(carpeta_salida, exist_ok=True)
+# ══════════════════════════════════════════════════════════════
+#  CONSTANTES
+# ══════════════════════════════════════════════════════════════
 
-    trayectoria1 = np.array(p1.historia_x)
-    trayectoria2 = np.array(p2.historia_x)
-    pasos_totales = trayectoria1.shape[0]
-    t = np.arange(pasos_totales) * dt
+ESPECIES = {
+    "electron":  {"m": 9.109e-31,  "q": -1.602e-19, "color": "cyan",    "label": "e⁻"},
+    "proton":    {"m": 1.673e-27,  "q":  1.602e-19,  "color": "red",     "label": "p⁺"},
+    "hidrogeno": {"m": 1.674e-27,  "q":  1.602e-19,  "color": "orange",  "label": "H⁺"},
+    "helio":     {"m": 6.646e-27,  "q":  3.204e-19,  "color": "yellow",  "label": "He²⁺"},
+    "helio3":    {"m": 5.008e-27,  "q":  3.204e-19,  "color": "green",   "label": "He3²⁺"},
+    "deuterio":  {"m": 3.344e-27,  "q":  1.602e-19,  "color": "magenta", "label": "D⁺"},
+}
 
-    datos1 = np.column_stack((t, trayectoria1))
-    datos2 = np.column_stack((t, trayectoria2))
+ESCALAS = {
+    "s":  ("segundos",      1.0),
+    "ms": ("milisegundos",  1e-3),
+    "us": ("microsegundos", 1e-6),
+    "ns": ("nanosegundos",  1e-9),
+}
 
-    np.savetxt(
-        os.path.join(carpeta_salida, "trayectoria_p1.csv"),
-        datos1,
-        delimiter=",",
-        header="t,x,y,z",
-        comments="",
+GEOMETRIAS = {
+    "1": ("cilindro", "Cilindro"),
+    "2": ("esfera",   "Esfera"),
+    "3": ("caja",     "Caja cúbica"),
+    "4": ("placas",   "Placas paralelas"),
+    "5": ("tokamak",  "Tokamak"),
+}
+
+CACHE_DIR = "cache"
+
+
+# ══════════════════════════════════════════════════════════════
+#  CACHÉ DE CAMPOS EXTERNOS
+# ══════════════════════════════════════════════════════════════
+
+def _nombre_cache(geo, radio, altura, B0, E0):
+    E0s = "_".join(f"{v:.2e}" for v in E0)
+    return f"{geo}_r{radio:.3f}_h{altura:.3f}_B{B0:.3f}_E{E0s}"
+
+def guardar_cache(rejilla, nombre):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    np.save(f"{CACHE_DIR}/{nombre}_E.npy",    rejilla.E_ext_grilla)
+    np.save(f"{CACHE_DIR}/{nombre}_B.npy",    rejilla.B_ext_grilla)
+    np.save(f"{CACHE_DIR}/{nombre}_mask.npy", rejilla.mask_libre)
+    print(f"  [Caché] Guardado → {CACHE_DIR}/{nombre}_*.npy")
+
+def cargar_cache(rejilla, nombre):
+    rE = f"{CACHE_DIR}/{nombre}_E.npy"
+    rB = f"{CACHE_DIR}/{nombre}_B.npy"
+    rM = f"{CACHE_DIR}/{nombre}_mask.npy"
+    if os.path.exists(rE) and os.path.exists(rB):
+        rejilla.E_ext_grilla = np.load(rE)
+        rejilla.B_ext_grilla = np.load(rB)
+        if os.path.exists(rM):
+            rejilla.mask_libre = np.load(rM)
+            rejilla.phi[~rejilla.mask_libre] = 0.0
+        print(f"  [Caché] Cargado ← {CACHE_DIR}/{nombre}_*.npy")
+        return True
+    return False
+
+
+# ══════════════════════════════════════════════════════════════
+#  DIÁLOGO EN CONSOLA
+# ══════════════════════════════════════════════════════════════
+
+def _float(msg, default=None):
+    while True:
+        try:
+            raw = input(msg).strip()
+            if raw == "" and default is not None:
+                return default
+            return float(raw)
+        except ValueError:
+            print("  → Número inválido")
+
+def _int(msg, minval=0):
+    while True:
+        try:
+            v = int(input(msg))
+            if v >= minval: return v
+            raise ValueError
+        except ValueError:
+            print(f"  → Entero ≥ {minval}")
+
+def pedir_parametros():
+    print("\n╔══════════════════════════════════════╗")
+    print("║   PARÁMETROS DE SIMULACIÓN           ║")
+    print("╚══════════════════════════════════════╝")
+    dt    = _float("  dt [s] (ej: 1e-10): ")
+    pasos = _int("  Pasos  (ej: 1000): ", minval=1)
+    return dt, pasos
+
+def pedir_campos():
+    print("\n╔══════════════════════════════════════╗")
+    print("║   CAMPOS EXTERNOS                    ║")
+    print("╚══════════════════════════════════════╝")
+    B0 = _float("  B0 [T]  (ej: 1.0): ", default=1.0)
+    print("  (B0>0 necesario para giro; E0≠0 solo si quieres deriva eléctrica)")
+    print("  E0 = Ex Ey Ez [V/m]:")
+    while True:
+        try:
+            E0 = tuple(float(v) for v in input("  Ex Ey Ez (ej: 0 0 0): ").split())
+            if len(E0) == 3: break
+        except ValueError:
+            pass
+        print("  → Tres números separados por espacios")
+    return B0, E0
+
+def pedir_geometria():
+    print("\n╔══════════════════════════════════════╗")
+    print("║   GEOMETRÍA DEL CONTENEDOR           ║")
+    print("╚══════════════════════════════════════╝")
+    for k, (_, n) in GEOMETRIAS.items():
+        print(f"  [{k}] {n}")
+    while True:
+        op = input("Seleccione [1-5]: ").strip()
+        if op in GEOMETRIAS: return GEOMETRIAS[op][0]
+        print("  → Opción inválida")
+
+def pedir_escala():
+    print("\n╔══════════════════════════════════════╗")
+    print("║   ESCALA DE TIEMPO (visualización)   ║")
+    print("╚══════════════════════════════════════╝")
+    for k, (n, _) in ESCALAS.items():
+        print(f"  [{k}] {n}")
+    while True:
+        op = input("Escala [s/ms/us/ns]: ").strip().lower()
+        if op in ESCALAS: return op
+        print("  → Opción inválida")
+
+def pedir_especies():
+    print("\n╔══════════════════════════════════════╗")
+    print("║   CONFIGURACIÓN DE ESPECIES          ║")
+    print("╚══════════════════════════════════════╝")
+    for k, v in ESPECIES.items():
+        print(f"  {k:10s}  m={v['m']:.3e} kg  q={v['q']:+.3e} C  [{v['label']}]")
+    conteos = {}; total = 0
+    print("\nCantidad de cada especie (0 = omitir):")
+    for nombre in ESPECIES:
+        n = _int(f"  {nombre}: ")
+        if n > 0:
+            conteos[nombre] = n; total += n
+    if total == 0:
+        print("  Al menos una partícula."); return pedir_especies()
+    print(f"\n  Total: {total} partículas")
+    return conteos, total
+
+
+# ══════════════════════════════════════════════════════════════
+#  CONSTRUCCIÓN DE PARTÍCULAS
+# ══════════════════════════════════════════════════════════════
+
+def construir_particulas(conteos, contenedor, dt, T_plasma=1e4, nu=500.0):
+    from particulas import Particula
+    from colisiones import ColisionEstocastica, velocidad_inicial_mb
+
+    rng = np.random.default_rng(42)
+    particulas, motores, colores = [], [], []
+
+    for idx, (nombre, n_esp) in enumerate(conteos.items()):
+        esp = ESPECIES[nombre]
+        for j in range(n_esp):
+            gid = sum(list(conteos.values())[:idx]) + j
+            x0  = contenedor.posicion_aleatoria(rng)
+            v0  = velocidad_inicial_mb(esp["m"], T_plasma, rng=rng)
+            p   = Particula(gid, q=esp["q"], m=esp["m"], x0=x0, v0=v0)
+            particulas.append(p)
+            motores.append(ColisionEstocastica(
+                nu=nu, m=esp["m"], T=T_plasma, dt=dt, seed=gid))
+            colores.append(esp["color"])
+
+    return particulas, motores, colores
+
+
+# ══════════════════════════════════════════════════════════════
+#  VISUALIZACIÓN 3D  (sin RecursionError)
+# ══════════════════════════════════════════════════════════════
+
+
+
+# ══════════════════════════════════════════════════════════════
+#  MAIN
+# ══════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    print("\n  Tip: para corridas organizadas en data/simulaciones/ usa:")
+    print("       python main.py\n")
+    print("╔══════════════════════════════════════╗")
+    print("║   SIMULADOR DE PLASMA — PIC 3D       ║")
+    print("╚══════════════════════════════════════╝")
+
+    dt, pasos  = pedir_parametros()
+    B0, E0     = pedir_campos()
+    geo        = pedir_geometria()
+    escala     = pedir_escala()
+
+    print("\n  Dimensiones del contenedor:")
+    radio  = _float("  Radio  (m) [ej: 0.5]: ", default=0.5)
+    altura = _float("  Altura (m) [ej: 1.0]: ", default=1.0)
+
+    contenedor_map = {
+        "cilindro": lambda: ContenedorCilindrico(radio=radio, altura=altura),
+        "esfera":   lambda: ContenedorEsferico(radio=radio),
+        "caja":     lambda: ContenedorCaja(Lx=radio*2, Ly=radio*2, Lz=altura),
+        "placas":   lambda: ContenedorPlacasParalelas(d=altura, L=radio*2),
+        "tokamak":  lambda: ContenedorTokamak(R=radio, a=altura/4),
+    }
+    contenedor = contenedor_map[geo]()
+
+    conteos, n = pedir_especies()
+    particulas, motores_colision, colores = construir_particulas(
+        conteos, contenedor, dt
     )
-    np.savetxt(
-        os.path.join(carpeta_salida, "trayectoria_p2.csv"),
-        datos2,
-        delimiter=",",
-        header="t,x,y,z",
-        comments="",
+
+    # Funciones de campo
+    E0_arr = np.array(E0)
+    fn_E   = lambda pos: campos_mod.campo_electrico_constante(pos, E0=E0_arr)
+    fn_B   = lambda pos: campos_mod.campo_magnetico_solenoide(
+                             pos, B0=B0, radio=radio)
+
+    # Rejilla con caché de campos externos
+    nombre_cache = _nombre_cache(geo, radio, altura, B0, E0)
+    print(f"\n  [Config] Preparando rejilla...")
+    rejilla = _configurar_rejilla(contenedor, (30, 30, 30), fn_E, fn_B)
+
+    if not cargar_cache(rejilla, nombre_cache):
+        guardar_cache(rejilla, nombre_cache)
+
+    # ── Simulación ──────────────────────────────────────
+    print(f"\n▶ Corriendo: {pasos} pasos, dt={dt:.2e}s, N={n} ...")
+    resultado = motor_simulacion(
+        pasos             = pasos,
+        particulas        = particulas,
+        motores_colision  = motores_colision,
+        n                 = n,
+        B0                = B0,
+        E0                = E0,
+        dt                = dt,
+        contenedor        = contenedor,
+        resolucion_grilla = (30, 30, 30),
+        registrar_energia = True,   # ← activa registro de E_cin
     )
 
+    # motor devuelve (tiempos_escape, E_cin_historia) cuando registrar_energia=True
+    tiempos_escape, E_cin_historia = resultado
 
-def prueba_trayectoria_helicoidal(
-    q=1e-6,
-    m=1e-9,
-    B0=1.0,
-    v_perp_mod=1e3,
-    v_par_mod=1e3,
-    dt=5e-5,
-    pasos=800,
-):
-    """
-    Prueba de una trayectoria helicoidal en un campo B uniforme y validación
-    del radio de Larmor simulando una sola partícula sin interacciones.
-    """
-    v_perp = np.array([0.0, v_perp_mod, 0.0])
-    v_par = np.array([0.0, 0.0, v_par_mod])
-    v0 = v_perp + v_par
+    guardar_logs_trayectorias(particulas, dt)
 
-    r_larmor_teorico = m * np.linalg.norm(v_perp) / (abs(q) * B0)
-    x0 = np.array([r_larmor_teorico, 0.0, 0.0])
+    # ── Resumen de colisiones ────────────────────────────
+    print("\n── Resumen de colisiones estocásticas ──")
+    for i, m in enumerate(motores_colision):
+        print(f"  P{i}: {m.resumen()}")
 
-    p = Particula(id_particula=99, q=q, m=m, x0=x0, v0=v0)
+    # ── Análisis Monte Carlo ─────────────────────────────
+    stats      = mc.calcular_tau(tiempos_escape, n, dt, pasos)
+    t_arr, N_arr = mc.curva_decaimiento(tiempos_escape, n, dt, pasos)
 
-    for _ in range(pasos):
-        B = np.array([0.0, 0.0, B0])
-        E = np.zeros(3)
-        x_nueva, v_nueva = boris_step(p.x, p.v, E, B, p.q, p.m, dt)
-        p.actualizar_estado(x_nueva, v_nueva)
-
-    trayectoria = np.array(p.historia_x)
-    r_xy = np.sqrt(trayectoria[:, 0] ** 2 + trayectoria[:, 1] ** 2)
-    r_larmor_numerico = r_xy.mean()
-
-    os.makedirs("data", exist_ok=True)
-    datos = np.column_stack((np.arange(trayectoria.shape[0]) * dt, trayectoria))
-    np.savetxt(
-        os.path.join("data", "trayectoria_helicoidal.csv"),
-        datos,
-        delimiter=",",
-        header="t,x,y,z",
-        comments="",
+    # Tau de Bohm teórico como referencia
+    esp_ref  = list(conteos.keys())[0]
+    tau_ref  = mc.tau_bohm(
+        radio    = radio,
+        B0       = B0,
+        T_plasma = 1e4,           # temperatura por defecto
+        q        = abs(ESPECIES[esp_ref]["q"]),
     )
 
-    print("=== Prueba de trayectoria helicoidal ===")
-    print(f"Radio de Larmor teórico:  {r_larmor_teorico:.6e} m")
-    print(f"Radio de Larmor numérico: {r_larmor_numerico:.6e} m")
+    mc.imprimir_resumen(stats, escala_key=escala, tau_ref=tau_ref)
+    mc.guardar_resultados(stats, t_arr, N_arr, carpeta="data")
 
+    # ── Visualización de plasma ───────────────────────────
+    lanzar_visualizacion(particulas, colores, contenedor, dt, escala,
+                         fn_E=fn_E, fn_B=fn_B, n_flechas=4)
 
-# --- 2. CONFIGURACIÓN ---
-dt = 5e-5
-pasos = 800
-pausado = True
-frame_actual = 0
-
-# Parámetros físicos
-p_radio = 0.5
-B0 = 1.0
-E0 = (0.0, 0.0, 0.0)
-m_particula = 1e-9          # masa [kg]
-q_particula = 1e-6          # carga [C]
-T_plasma = 1e4              # temperatura del plasma [K]   
-nu_colision = 500.0         # frecuencia de colisión [Hz]  
-
-contenedor = ContenedorCilindrico(radio=p_radio)
-
-# Velocidades iniciales distribuidas según Maxwell-Boltzmann
-rng_global = np.random.default_rng(42)
-v0_p1 = velocidad_inicial_mb(m_particula, T_plasma, rng=rng_global)
-v0_p2 = velocidad_inicial_mb(m_particula, T_plasma, rng=rng_global)
-
-p1 = Particula(1, q=q_particula, m=m_particula, x0=[-0.05, 0, 0], v0=v0_p1)
-p2 = Particula(2, q=q_particula, m=m_particula, x0=[ 0.05, 0, 0], v0=v0_p2)
-
-# Modelos estocásticos de colisión, uno por partícula
-col1 = ColisionEstocastica(nu=nu_colision, m=m_particula, T=T_plasma, dt=dt, seed=1)
-col2 = ColisionEstocastica(nu=nu_colision, m=m_particula, T=T_plasma, dt=dt, seed=2)
-
-# Pre-cálculo
-for _ in range(pasos):
-    # Campos externos
-    B1 = campo_magnetico_solenoide(p1.x, B0=B0, radio=p_radio)
-    B2 = campo_magnetico_solenoide(p2.x, B0=B0, radio=p_radio)
-    E_ext_1 = campo_electrico_constante(p1.x, E0=E0)
-    E_ext_2 = campo_electrico_constante(p2.x, E0=E0)
-
-    # Interacción entre partículas (Coulomb simple)
-    E1_int = calcular_E_interaccion(p1, p2)
-    E2_int = calcular_E_interaccion(p2, p1)
-
-    E1 = E_ext_1 + E1_int
-    E2 = E_ext_2 + E2_int
-
-    x1, v1 = boris_step(p1.x, p1.v, E1, B1, p1.q, p1.m, dt)
-    x2, v2 = boris_step(p2.x, p2.v, E2, B2, p2.q, p2.m, dt)
-
-    # Colisión estocástica: redistribución de velocidad (Semana 5)
-    v1, _ = col1.aplicar(v1)
-    v2, _ = col2.aplicar(v2)
-
-    # Detección de colisión con la pared del contenedor
-    if not contenedor.esta_dentro(x1):
-        x1 = contenedor.proyectar_a_frontera(x1)
-        v1 = np.zeros(3)
-    if not contenedor.esta_dentro(x2):
-        x2 = contenedor.proyectar_a_frontera(x2)
-        v2 = np.zeros(3)
-
-    p1.actualizar_estado(x1, v1)
-    p2.actualizar_estado(x2, v2)
-
-print(col1.resumen())
-print(col2.resumen())
-
-guardar_logs_trayectorias(p1, p2, dt)
-prueba_trayectoria_helicoidal()
-
-# --- 3. INTERFAZ ---
-fig, ax = plt.subplots(figsize=(6, 6))
-ax.set_xlim(-1, 1)
-ax.set_ylim(-1, 1)
-ax.grid(True)
-ax.set_title("ESPACIO: Pausa | FLECHAS: <- / ->")
-
-punto1, = ax.plot([], [], 'ro', markersize=10, label="P1")
-punto2, = ax.plot([], [], 'bo', markersize=10, label="P2")
-ax.legend()
-
-def presionar_tecla(event):
-    global pausado, frame_actual
-    if event.key == ' ':
-        pausado = not pausado
-    elif event.key == 'right':
-        pausado = True
-        frame_actual = (frame_actual + 1) % pasos
-    elif event.key == 'left':
-        pausado = True
-        frame_actual = (frame_actual - 1) % pasos
-    # Actualización inmediata al presionar flechas
-    pos1 = p1.historia_x[frame_actual]
-    pos2 = p2.historia_x[frame_actual]
-    punto1.set_data([pos1[0]], [pos1[1]])
-    punto2.set_data([pos2[0]], [pos2[1]])
-    fig.canvas.draw_idle()
-
-fig.canvas.mpl_connect('key_press_event', presionar_tecla)
-
-def update(frame):
-    global frame_actual
-    if not pausado:
-        frame_actual = (frame_actual + 1) % pasos
-        pos1 = p1.historia_x[frame_actual]
-        pos2 = p2.historia_x[frame_actual]
-        punto1.set_data([pos1[0]], [pos1[1]])
-        punto2.set_data([pos2[0]], [pos2[1]])
-    return punto1, punto2
-
-ani = FuncAnimation(fig, update, interval=10, blit=True, save_count=pasos)
-plt.show()
+    # ── Figura Monte Carlo ──────────────────────────────
+    mc.graficar_resultados(
+        stats         = stats,
+        t_arr         = t_arr,
+        N_arr         = N_arr,
+        E_cin_historia= E_cin_historia,
+        particulas    = particulas,
+        contenedor    = contenedor,
+        tiempos_escape= tiempos_escape,
+        escala_key    = escala,
+        tau_ref       = tau_ref,
+        guardar_dir   = "data",
+    )

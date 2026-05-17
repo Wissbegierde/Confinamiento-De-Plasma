@@ -1,13 +1,13 @@
 """
 colisiones.py
 =============
-Semana 5 del cronograma: Modelo estocástico de colisiones.
+Modelo estocástico de colisiones.
 
-Módulo 1 (Persona 2): Distribución de Maxwell-Boltzmann
+Módulo 1: Distribución de Maxwell-Boltzmann
     - velocidad_maxwell_boltzmann  : muestrea |v| de la distribución MB
     - velocidad_inicial_mb         : genera un vector v 3D isotrópico con |v|~MB
 
-Módulo 2 (Persona 1): Modelo estocástico de colisión
+Módulo 2: Modelo estocástico de colisión
     - ColisionEstocastica          : clase que decide si hay colisión en cada paso
                                      y redistribuye la velocidad de la partícula
 """
@@ -16,7 +16,7 @@ import numpy as np
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# PARTE 1 — Distribución de Maxwell-Boltzmann (Persona 2)
+# PARTE 1 — Distribución de Maxwell-Boltzmann
 # ──────────────────────────────────────────────────────────────────────────────
 
 def velocidad_maxwell_boltzmann(m: float, T: float, rng=None) -> float:
@@ -69,7 +69,7 @@ def velocidad_inicial_mb(m: float, T: float, rng=None) -> np.ndarray:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# PARTE 2 — Modelo estocástico de colisión (Persona 1)
+# PARTE 2 — Modelo estocástico de colisión
 # ──────────────────────────────────────────────────────────────────────────────
 
 class ColisionEstocastica:

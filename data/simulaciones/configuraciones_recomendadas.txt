@@ -1,0 +1,285 @@
+================================================================================
+  CONFIGURACIONES RECOMENDADAS — Simulador de plasma (main.py)
+================================================================================
+  Archivo de referencia para obtener gráficas MC, mapas de calor y 3D
+  coherentes con cada geometría del contenedor.
+
+  Cómo usar: al ejecutar "python main.py", introduce los valores de la
+  sección que corresponda a tu geometría (menú opción 1–5).
+
+  Convenciones en ui_consola:
+    • "Radio" y "Altura" siempre se piden en metros [m].
+    • Tokamak: radio = R (radio mayor), altura → a = altura/4 (radio menor).
+    • Caja: radio×2 = Lx, Ly; altura = Lz.
+    • Placas: altura = separación d; radio×2 = lado L de las placas.
+
+  Motor recomendado: PIC (opción 1) para entregas y mapas alineados con MC.
+  Motor lite (opción 2): barridos rápidos; misma geometría en config.
+
+================================================================================
+  REGLAS GENERALES (todas las geometrías)
+================================================================================
+
+  Campos
+  ------
+  B0  : > 0 siempre (giro y confinamiento). 0.1–1.0 T para laboratorio mini.
+  E0  : 0 0 0 por defecto (solo plasma + Poisson).
+        Para deriva E×B visible: 50–200 V/m perpendicular a B (ej. 100 0 0).
+
+  Paso de tiempo dt
+  -----------------
+  Criterio: dt < T_c / 20,  con T_c = 2π m / (q B0).
+  Protón, B0 = 1 T  →  T_c ≈ 66 ns  →  dt ≤ 3×10⁻¹⁰ s (usar 1×10⁻¹⁰ s).
+  Si incluyes electrones, T_c es ~1800× menor → dt ~ 5×10⁻¹³ s o quita e⁻.
+
+  Duración (pasos × dt)
+  ---------------------
+  • Ver órbitas en 3D:  t_sim ≥ 10·T_c  (protón B=1 T → ≥ 700 ns).
+  • MC con pocos censurados: t_sim ≥ 3·τ esperado o hasta ~50–70 % escape.
+  • Evitar 100 % partículas confinadas al final (censura fuerte en τ).
+
+  Escala de visualización (solo etiquetas)
+  ----------------------------------------
+  t_sim < 1 µs   →  ns
+  t_sim 1–100 µs →  us
+  t_sim > 0.1 ms →  ms
+
+  Partículas
+  ----------
+  N total 60–120 (6 especies × 10–20) equilibra estadística y tiempo de cómputo.
+  Para pruebas rápidas: 1 especie (proton) × 40 partículas.
+
+  Plasma (colisiones)
+  -------------------
+  T_plasma = 1×10⁴ K     (ions ligeros, v térmica moderada)
+  nu_colision = 200–500 Hz   (más nu → más pérdida de energía y escapes)
+
+  Salidas sugeridas
+  -----------------
+  trayectorias: sí
+  montecarlo: sí
+  mapas_calor: sí (misma corrida PIC)
+  visualizacion_3d: sí (tras arreglo de límites de eje, ver toro/cilindro)
+
+================================================================================
+  1. CILINDRO (geometria: cilindro)
+================================================================================
+  Uso: solenoide B||z, tapas z_min/z_max, pared lateral r = radio.
+
+  Parámetros contenedor
+  ---------------------
+  radio  = 0.01        # 10 mm
+  altura = 0.02        # 20 mm (eje z)
+
+  Configuración óptima (PIC)
+  --------------------------
+  motor      = pic
+  dt         = 1e-10
+  pasos      = 15000          # t_sim = 1.5 µs → escala us
+  escala     = us
+  B0         = 0.5              # B uniforme dentro de r (solenoide)
+  E0         = 0 0 0
+  T_plasma   = 1e4
+  nu_colision = 400
+  conteos    = proton:15, hidrogeno:15, deuterio:15  (45 total, rápido)
+               o 6 especies × 15 = 90
+
+  Qué deberías ver
+  ----------------
+  • 3D: cilindro visible; partículas giran en xy; escapes por tapa o lateral.
+  • MC: decaimiento N_conf(t) con ajuste exp. censurado cercano a la curva azul.
+  • Mapas: densidad (r,z); flujo lateral / z_min / z_max.
+  • Flechas B en z dentro del volumen; E solo si E0 ≠ 0.
+
+  Variante “más escapes” (histograma más lleno)
+  ---------------------------------------------
+  B0 = 0.2, nu = 800, pasos = 20000, escala = us
+
+================================================================================
+  2. ESFERA (geometria: esfera)
+================================================================================
+  Uso: plasma en cavidad esférica; B solenoide usa "radio" como límite B.
+
+  Parámetros contenedor
+  ---------------------
+  radio  = 0.01        # 10 mm (altura se ignora en geometría)
+  altura = 0.02        # (no usado; puede dejarse por defecto)
+
+  Configuración óptima (PIC)
+  --------------------------
+  motor      = pic
+  dt         = 1e-10
+  pasos      = 12000          # 1.2 µs → escala us
+  escala     = us
+  B0         = 0.8
+  E0         = 0 0 0
+  T_plasma   = 1e4
+  nu_colision = 350
+  conteos    = proton:20, helio:20, deuterio:20  (60 total)
+
+  Qué deberías ver
+  ----------------
+  • Impactos distribuidos en la superficie esférica (mapa XY del panel MC).
+  • Menos estructura en z que en cilindro; confinamiento depende de r.
+
+  Nota: campo B tipo solenoide en esfera es aproximado (B en z, corte en r).
+
+================================================================================
+  3. CAJA CÚBICA (geometria: caja)
+================================================================================
+  Uso: caja Lx×Ly×Lz; límites ±radio en x,y y ±altura/2 en z si altura=Lz.
+
+  Parámetros contenedor
+  ---------------------
+  radio  = 0.005       # → Lx = Ly = 10 mm
+  altura = 0.01        # → Lz = 10 mm
+
+  Configuración óptima (PIC)
+  --------------------------
+  motor      = pic
+  dt         = 1e-10
+  pasos      = 10000          # 1 µs → escala us
+  escala     = us
+  B0         = 1.0
+  E0         = 0 0 0
+  T_plasma   = 1e4
+  nu_colision = 500
+  conteos    = 6 especies × 10 = 60
+
+  Qué deberías ver
+  ----------------
+  • Impactos en caras x_min/x_max/y_min/y_max/z_min/z_max (clasificación caja).
+  • 3D: cubo ~10 mm; partículas rebotan en caras.
+
+  Variante con deriva eléctrica
+  -----------------------------
+  E0 = 100 0 0, B0 = 0.5  (E×B en xy)
+
+================================================================================
+  4. PLACAS PARALELAS (geometria: placas)
+================================================================================
+  Uso: confinamiento entre dos placas (campo E0||z útil aquí).
+
+  Parámetros contenedor
+  ---------------------
+  radio  = 0.01        # L = 20 mm (extensión en x,y)
+  altura = 0.005       # d = 5 mm (separación entre placas)
+
+  Configuración óptima (PIC)
+  --------------------------
+  motor      = pic
+  dt         = 1e-10
+  pasos      = 8000           # 800 ns → escala ns
+  escala     = ns
+  B0         = 0.3
+  E0         = 0 0 100          # campo entre placas (opcional; 0 0 0 también válido)
+  T_plasma   = 1e4
+  nu_colision = 400
+  conteos    = electron:10, proton:10, hidrogeno:10  (30, más rápido)
+               Cuidado: electrones exigen dt más pequeño si quieres rigor e⁻.
+
+  Configuración solo iones (más estable, dt estándar)
+  ---------------------------------------------------
+  E0 = 0 0 0, conteos = proton:20, deuterio:20, pasos = 12000
+
+  Qué deberías ver
+  ----------------
+  • Escapes principalmente z_min / z_max (histograma de tipos de pared).
+  • Con E0||z: deriva hacia una placa; flechas E visibles en 3D.
+
+================================================================================
+  5. TOKAMAK (geometria: tokamak)  ← la más usada en el proyecto
+================================================================================
+  Uso: toro; R = radio mayor, a = altura/4 (radio del tubo).
+
+  Parámetros contenedor
+  ---------------------
+  radio  = 0.01        # R = 10 mm (centro del tubo al eje z)
+  altura = 0.02        # → a = 5 mm (radio poloidal del tubo)
+
+  Configuración óptima — visualización y MC (PIC)
+  -----------------------------------------------
+  motor      = pic
+  dt         = 1e-10
+  pasos      = 20000          # 2 µs → escala us (menos censura que 1000 ns)
+  escala     = us
+  B0         = 0.5              # campo toroidal tokamak (no solenoide)
+  E0         = 0 0 0
+  T_plasma   = 1e4
+  nu_colision = 400
+  conteos    = 6 especies × 15 = 90
+               o 6 × 20 = 120 (como ejemplo5, más estadística)
+
+  Qué deberías ver
+  ----------------
+  • 3D: toro visible (~±18 mm en xy, ±6 mm en z); trazas en el tubo.
+  • MC: ~30–60 % escape en 2 µs; τ exp. censurado ~ 1–2 µs si escala us.
+  • Mapas PIC: densidad en anillo R_xy≈10 mm; impactos en anillo de pared.
+  • Histograma: no será exponencial perfecta (picos tempranos + cola larga).
+
+  Configuración corta (prueba rápida, como ejemplo5)
+  --------------------------------------------------
+  pasos = 10000, escala = ns, B0 = 1.0
+  → muchas partículas aún confinadas al final; τ medio inflado por censura.
+  Aceptable para prueba; no para comparar con τ Bohm.
+
+  Configuración “órbitas visibles” (3D)
+  -------------------------------------
+  B0 = 1.0, dt = 1e-10, pasos = 8000, escala = ns
+  → ~1.5 períodos de ciclotrón para protón; movimiento xy visible.
+
+  Evitar
+  ------
+  • pasos = 1000, escala ns, sin revisar censura → 50 %+ confinadas al final.
+  • B0 = 0 → casi sin giro.
+  • Mezclar electrones con dt = 1e-10 sin resolver T_c(e⁻).
+
+================================================================================
+  TABLA RÁPIDA — copiar al menú
+================================================================================
+
+  Geometría   | radio  | altura | dt      | pasos  | escala | B0   | E0
+  ------------|--------|--------|---------|--------|--------|------|--------
+  cilindro    | 0.01   | 0.02   | 1e-10   | 15000  | us     | 0.5  | 0 0 0
+  esfera      | 0.01   | 0.02   | 1e-10   | 12000  | us     | 0.8  | 0 0 0
+  caja        | 0.005  | 0.01   | 1e-10   | 10000  | us     | 1.0  | 0 0 0
+  placas      | 0.01   | 0.005  | 1e-10   | 12000  | us     | 0.3  | 0 0 0
+  tokamak     | 0.01   | 0.02   | 1e-10   | 20000  | us     | 0.5  | 0 0 0
+
+  Plasma común: T = 1e4 K, nu = 400 Hz, motor = pic, N ≈ 60–120
+
+================================================================================
+  INTERPRETACIÓN DE GRÁFICAS (evitar conclusiones erróneas)
+================================================================================
+
+  Decaimiento N_conf(t) vs curva exponencial
+  • La línea roja debe ser "Exp. censurado" (τ incluye partículas no escapadas).
+  • Si al final quedan muchas confinadas, la exponencial solo-escapadas (τ~300 ns)
+    caerá más rápido que los datos → no es bug, es censura.
+
+  Histograma de escapes
+  • No tiene por qué ser exponencial: tokamak + colisiones + paredes.
+  • Pico al inicio = partículas que golpean pared pronto.
+
+  τ en pie de figura
+  • τ medio (c/confinadas): incluye censurados al tiempo final.
+  • τ escapadas: solo las que salieron.
+  • τ exp. censurado: el que ajusta N(t).
+
+  Mapas de calor
+  • Deben generarse con motor PIC y misma corrida (no lite en cilindro distinto).
+
+================================================================================
+  COMANDOS ÚTILES
+================================================================================
+
+  cd Lib
+  python main.py
+  python main.py --list
+  python main.py --figuras "..\data\simulaciones\<run_id>"
+
+  Diagnóstico de escalas: python _diagnostico_escalas.py
+
+================================================================================
+  Última actualización: 2026-05-16 (código con tokamak B, mapas PIC, MC censurado)
+================================================================================

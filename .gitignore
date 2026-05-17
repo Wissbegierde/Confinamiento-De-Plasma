@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# Caché Poisson / corridas locales
+Lib/cache/
+
+# Datos generados por simulaciones (corridas completas)
+data/simulaciones/*
+!data/simulaciones/configuraciones_recomendadas.txt
+
+# Otros outputs de simulación / barridos
+data/barrido_*/
+data/test_mc/
+data/trayectorias/
+data/mapas_calor/
+data/validacion/
+
+# IDE / OS
+.cursor/
+.vscode/
+Thumbs.db
+Desktop.ini
