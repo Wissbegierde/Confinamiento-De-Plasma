@@ -86,8 +86,39 @@ def _dibujar_contenedor(ax, contenedor, color="#444466", alpha=0.18):
                 np.zeros_like(theta), color=color, linewidth=1.0, alpha=0.7)
 
     elif isinstance(contenedor, ContenedorCaja):
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
         Lx, Ly, Lz = contenedor.lim * 2
         hx, hy, hz = Lx/2, Ly/2, Lz/2
+
+        # Caras (6) — para verse como los otros sólidos (con relleno translúcido)
+        v000 = (-hx, -hy, -hz)
+        v001 = (-hx, -hy,  hz)
+        v010 = (-hx,  hy, -hz)
+        v011 = (-hx,  hy,  hz)
+        v100 = ( hx, -hy, -hz)
+        v101 = ( hx, -hy,  hz)
+        v110 = ( hx,  hy, -hz)
+        v111 = ( hx,  hy,  hz)
+
+        caras = [
+            [v000, v100, v110, v010],  # z = -hz
+            [v001, v011, v111, v101],  # z = +hz
+            [v000, v010, v011, v001],  # x = -hx
+            [v100, v101, v111, v110],  # x = +hx
+            [v000, v001, v101, v100],  # y = -hy
+            [v010, v110, v111, v011],  # y = +hy
+        ]
+
+        poly = Poly3DCollection(
+            caras,
+            facecolors=color,
+            edgecolors=color,
+            linewidths=0.6,
+            alpha=alpha,
+        )
+        ax.add_collection3d(poly)
+
         # 12 aristas de la caja
         aristas = [
             [[-hx,hx],[-hy,-hy],[-hz,-hz]],

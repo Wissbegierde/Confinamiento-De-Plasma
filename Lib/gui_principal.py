@@ -703,9 +703,21 @@ class SimuladorGUI:
                          width=11).pack(side="left", fill="x", expand=True)
             canvas.update_idletasks()
             canvas.configure(scrollregion=canvas.bbox("all"))
+            # Actualizar vista previa 3D del contenedor cuando cambia la forma
+            self._update_preview_contenedor()
 
         self._vars["geometria"].trace_add("write", _on_geo_change)
         _on_geo_change()
+
+        # Cuando el usuario modifica parámetros geométricos, refrescar la vista previa.
+        def _on_geo_param_change(*_):
+            self._update_preview_contenedor()
+
+        for _k in ("radio", "altura", "Lx", "Ly", "Lz",
+                   "separacion", "L_placas", "R_mayor", "a_menor"):
+            var = self._vars.get(_k)
+            if var is not None:
+                var.trace_add("write", _on_geo_param_change)
 
         # ══ CAMPOS ELECTROMAGNÉTICOS — con selección de tipo ════
         sec_campos = collapsible_section(f, "CAMPOS ELECTROMAGNÉTICOS", T["cyan"])
@@ -1093,7 +1105,7 @@ class SimuladorGUI:
         self.ax3d  = self.fig3d.add_subplot(111, projection="3d")
         self.ax3d.set_facecolor(T["plot"])
         self._style_3d(self.ax3d)
-        self.ax3d.set_title("Sin simulación activa · Configure y presione INICIAR",
+        self.ax3d.set_title("Sin simulación activa · Configure parámetros",
                             color=T["mid"], fontsize=8)
 
         self.canvas3d = FigureCanvasTkAgg(self.fig3d, master=viz)
@@ -1104,6 +1116,8 @@ class SimuladorGUI:
         # Rueda = zoom  |  Derecho = rotar  |  Izquierdo = pan
         self._cam = None          # estado de cámara guardado por el usuario
         self._setup_3d_interaction()
+        # Vista previa inicial del contenedor según los parámetros por defecto
+        self.root.after(50, self._update_preview_contenedor)
 
         # ── Slider de tiempo (activo sólo cuando hay historia) ──
         slider_f = tk.Frame(c, bg=T["panel"])
@@ -1277,7 +1291,11 @@ class SimuladorGUI:
 
     # ─── Interacción 3D ────────────────────────────
     def _sync_3d_box_aspect(self):
-        """Proporción x:y:z según límites actuales (rotar arriba/abajo natural)."""
+        """
+        Proporción x:y:z según límites actuales.
+        Si z es muy pequeño frente a xy (tokamak, cilindro bajo), el sólido 3D
+        puede verse aplastado o desaparecer; se impone un mínimo visual en z.
+        """
         ax = self.ax3d
         try:
             x0, x1 = ax.get_xlim3d()
@@ -1286,7 +1304,10 @@ class SimuladorGUI:
             rx = max(x1 - x0, 1e-15)
             ry = max(y1 - y0, 1e-15)
             rz = max(z1 - z0, 1e-15)
-            ax.set_box_aspect((rx, ry, rz))
+            r_xy = max(rx, ry)
+            # Mínimo ~20 % del diámetro horizontal para que las mallas se vean
+            rz_vis = max(rz, 0.20 * r_xy)
+            ax.set_box_aspect((rx, ry, rz_vis))
         except Exception:
             pass
 
@@ -1409,9 +1430,21 @@ class SimuladorGUI:
             return
         try:
             self.ax3d.view_init(elev=self._cam["elev"], azim=self._cam["azim"])
-            self.ax3d.set_xlim3d(self._cam["xlim"])
-            self.ax3d.set_ylim3d(self._cam["ylim"])
-            self.ax3d.set_zlim3d(self._cam["zlim"])
+            # Solo reaplicar zoom/pan guardado si el origen sigue dentro del encuadre.
+            # La geometría (caja, toro, etc.) está centrada en (0,0,0); límites viejos
+            # tras un pan exagerado dejan el volumen invisible (p. ej. ejes 0.2–0.8 m).
+            def _encuadra_origen(tupla_lim):
+                lo, hi = float(tupla_lim[0]), float(tupla_lim[1])
+                a, b = (lo, hi) if lo <= hi else (hi, lo)
+                return a <= 0.0 <= b
+
+            if all(
+                _encuadra_origen(self._cam[k])
+                for k in ("xlim", "ylim", "zlim")
+            ):
+                self.ax3d.set_xlim3d(self._cam["xlim"])
+                self.ax3d.set_ylim3d(self._cam["ylim"])
+                self.ax3d.set_zlim3d(self._cam["zlim"])
         except Exception:
             pass
 
@@ -2216,29 +2249,107 @@ class SimuladorGUI:
         except Exception:
             pass
 
+    # ── Vista previa estática del contenedor (sin simulación) ─────
+    def _update_preview_contenedor(self):
+        """
+        Dibuja únicamente la geometría del contenedor 3D a partir del formulario,
+        sin requerir que haya una simulación en marcha.
+        """
+        try:
+            from visualizacion import _dibujar_contenedor, _limites_vista
+            from contenedor import (ContenedorCilindrico, ContenedorEsferico,
+                                    ContenedorCaja, ContenedorPlacasParalelas,
+                                    ContenedorTokamak)
+
+            cfg = self._get_config()
+            geo = cfg["geometria"]
+
+            if geo == "cilindro":
+                cont = ContenedorCilindrico(
+                    radio=cfg["radio"],
+                    altura=cfg["altura"])
+            elif geo == "esfera":
+                cont = ContenedorEsferico(radio=cfg["radio"])
+            elif geo == "caja":
+                cont = ContenedorCaja(
+                    Lx=cfg["Lx"],
+                    Ly=cfg["Ly"],
+                    Lz=cfg["Lz"])
+            elif geo == "placas":
+                cont = ContenedorPlacasParalelas(
+                    d=cfg["separacion"],
+                    L=cfg["L_placas"])
+            elif geo == "tokamak":
+                cont = ContenedorTokamak(
+                    R=cfg["R_mayor"],
+                    a=cfg["a_menor"])
+            else:
+                return
+
+            # Exponerlo en el estado global para que el resto de vistas lo use
+            with G._lock:
+                G.contenedor = cont
+
+            self.ax3d.cla()
+            self._style_3d(self.ax3d)
+            _dibujar_contenedor(self.ax3d, cont)
+            self._repaint_contenedor(self.ax3d)
+            lim_xy, lim_z = _limites_vista(cont)
+            self.ax3d.set_xlim(-lim_xy, lim_xy)
+            self.ax3d.set_ylim(-lim_xy, lim_xy)
+            self.ax3d.set_zlim(-lim_z,  lim_z)
+            self._sync_3d_box_aspect()
+            self.ax3d.set_title(
+                "Vista previa del contenedor (sin simulación)",
+                color=T["mid"], fontsize=8, pad=4)
+            self.canvas3d.draw_idle()
+        except Exception:
+            # En caso de parámetros inválidos o import fallido, no rompemos la GUI
+            pass
+
     # ──────────────────────────────────────────────────────────────
     #  REPINTAR CONTENEDOR — aplicar colores distinguibles
     # ──────────────────────────────────────────────────────────────
     def _repaint_contenedor(self, ax):
         """
-        Recorre las colecciones del eje después de _dibujar_contenedor
-        y aplica colores adaptados al tema activo.
-        Tema oscuro: cian muy transparente.  Tema claro: azul oscuro sutil.
+        Tras _dibujar_contenedor, ajusta mallas 3D al tema.
+        (Evitar hex tipo #RRGGBB08: el byte final es alfa ~3 % y deja el sólido invisible.)
         """
         try:
             from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
+
             is_dark = (T["plot"] == "#0d1020")
-            face_c  = "#00d4ff08" if is_dark else "#0044aa08"
-            edge_c  = "#00d4ff55" if is_dark else "#0044aa66"
-            line_c  = "#00d4ff44" if is_dark else "#0044aa55"
+            # Caras translúcidas pero visibles (α ~0.14–0.18)
+            if is_dark:
+                face_c = (0.0, 0.85, 1.0, 0.16)
+                edge_c = (0.4, 0.95, 1.0, 0.7)
+                line_c = (0.4, 0.95, 1.0, 0.65)
+            else:
+                face_c = (0.0, 0.25, 0.55, 0.14)
+                edge_c = (0.0, 0.2, 0.45, 0.65)
+                line_c = (0.0, 0.2, 0.45, 0.55)
+
             for col in ax.collections:
                 if isinstance(col, Poly3DCollection):
                     col.set_facecolor(face_c)
                     col.set_edgecolor(edge_c)
-                    col.set_linewidth(0.5)
+                    col.set_linewidth(0.6)
                 elif isinstance(col, Line3DCollection):
                     col.set_color(line_c)
-                    col.set_linewidth(0.6)
+                    col.set_linewidth(0.75)
+
+            # Algunos contenedores (p. ej. `ContenedorCaja`) se dibujan con `ax.plot`
+            # (Line3D), no como *Collection*. Recoloreamos SOLO las líneas existentes
+            # en este punto del pipeline (antes de trayectorias/partículas).
+            for ln in getattr(ax, "lines", []):
+                try:
+                    c = ln.get_color()
+                    if c in ("#444466", "#444466ff", "#444466FF"):
+                        ln.set_color(line_c)
+                        ln.set_alpha(line_c[3] if isinstance(line_c, tuple) and len(line_c) == 4 else 0.65)
+                        ln.set_linewidth(1.1)
+                except Exception:
+                    pass
         except Exception:
             pass
 

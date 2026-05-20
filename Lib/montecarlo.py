@@ -18,9 +18,13 @@ import os
 import numpy as np
 import matplotlib
 from contenedor import ContenedorTokamak, ContenedorCilindrico, ContenedorEsferico
-for _b in ('Qt5Agg', 'TkAgg', 'Agg'):
+# Elegir un backend que exista de verdad.
+# 'matplotlib.use("Qt5Agg")' puede "funcionar" aunque no tengas PyQt/PySide,
+# y fallar recién cuando se crea la primera figura. Preferimos TkAgg (GUI) o Agg (headless).
+for _b in ("TkAgg", "Agg"):
     try:
-        matplotlib.use(_b); break
+        matplotlib.use(_b, force=True)
+        break
     except Exception:
         continue
 import matplotlib.pyplot as plt
@@ -231,6 +235,14 @@ def graficar_resultados(stats: dict, t_arr: np.ndarray, N_arr: np.ndarray,
     """
     if mostrar is None:
         mostrar = guardar_dir is None
+
+    # Si no vamos a mostrar ventana, forzar backend no-GUI.
+    # Esto evita depender de Qt y permite guardar figuras desde hilos.
+    if not mostrar:
+        try:
+            plt.switch_backend("Agg")
+        except Exception:
+            pass
 
     if "t_escape_arr" not in stats:
         raise KeyError(
