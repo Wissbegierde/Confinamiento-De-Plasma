@@ -53,7 +53,8 @@ class GestorCorrida:
             run_id = f"{run_id}_dup"
             run_dir = self.base / run_id
 
-        for sub in ("trayectorias", "montecarlo", "figuras", "mapas_calor"):
+        # Subcarpetas estándar. Los mapas de calor se guardan dentro de `figuras/`.
+        for sub in ("trayectorias", "montecarlo", "figuras"):
             (run_dir / sub).mkdir(parents=True)
 
         fecha = datetime.now().isoformat(timespec="seconds")
@@ -64,6 +65,7 @@ class GestorCorrida:
             "carpeta": str(run_dir.relative_to(_PROYECTO)).replace("\\", "/"),
         }
         config["fecha"] = fecha
+        # Guardar siempre `config.json` en la raíz de la corrida (NO dentro de figuras/).
         with open(run_dir / "config.json", "w", encoding="utf-8") as f:
             json.dump(config_guardado, f, indent=2, ensure_ascii=False)
 

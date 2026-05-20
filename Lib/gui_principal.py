@@ -957,7 +957,7 @@ class SimuladorGUI:
         sec_exp = collapsible_section(f, "EXPORTAR", T["mid"], open_default=False)
         checkbox(sec_exp, "Trayectorias CSV",     "exp_tray",  True)
         checkbox(sec_exp, "Análisis Monte Carlo", "exp_mc",    True)
-        checkbox(sec_exp, "Mapas de calor",       "exp_mapas", False)
+        checkbox(sec_exp, "Mapas de calor",       "exp_mapas", True)
         checkbox(sec_exp, "Visualización 3D",     "exp_3d",    True)
 
         # ── Simulaciones guardadas ──────────────────────────────
@@ -1063,18 +1063,27 @@ class SimuladorGUI:
 
         def _toggle_view():
             if self._view_mode.get() == "particles":
+                # No permitir mapa de calor si aún no hay historia (antes de simular).
+                if (not G.particulas) or (not any(getattr(p, "historia_x", None) for p in G.particulas)):
+                    self._log("  [AVISO] Mapa de calor disponible tras iniciar simulación.", "err")
+                    self._view_mode.set("particles")
+                    self._btn_view_toggle.config(
+                        text="Cambiar a mapa de calor", fg=T["cyan"], bg=T["card"])
+                    # Asegurar que el contenedor siga visible (preview)
+                    self._update_preview_contenedor()
+                    return
                 self._view_mode.set("heatmap")
                 self._btn_view_toggle.config(
-                    text="🌡 CALOR", fg=T["orange"], bg=T["muted"])
+                    text="Cambiar a partículas", fg=T["orange"], bg=T["muted"])
                 self._show_heatmap()
             else:
                 self._view_mode.set("particles")
                 self._btn_view_toggle.config(
-                    text="⚛ PARTÍCULAS", fg=T["cyan"], bg=T["card"])
+                    text="Cambiar a mapa de calor", fg=T["cyan"], bg=T["card"])
                 self._refresh_3d(G.step)
 
         self._btn_view_toggle = tk.Button(
-            stat_row, text="⚛ PARTÍCULAS",
+            stat_row, text="Cambiar a mapa de calor",
             command=_toggle_view,
             bg=T["card"], fg=T["cyan"],
             font=("Courier New", 8, "bold"),
@@ -2642,9 +2651,9 @@ class SimuladorGUI:
                 else:
                     self._update_3d_final()
             else:
-                self.ax3d.set_title(
-                    "Sin simulación activa · Configure y presione INICIAR",
-                    color=T["mid"], fontsize=8)
+                # Si no hay simulación/historia, volver a la vista previa del contenedor.
+                self._update_preview_contenedor()
+                return
             self.canvas3d.draw_idle()
         except Exception as ex:
             self._log(f"  [AVISO] _refresh_3d: {ex}", "err")

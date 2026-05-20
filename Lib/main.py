@@ -315,12 +315,9 @@ def guardar_salidas(config: dict, run_dir: os.PathLike, resultado: dict):
         generar_mapas_desde_corrida(
             config,
             resultado=resultado,
-            carpeta_salida=os.path.join(run_dir, "mapas_calor"),
+            # Guardar directamente en `figuras/` (sin crear `mapas_calor/`).
+            carpeta_salida=os.path.join(run_dir, "figuras"),
         )
-        src = os.path.join(run_dir, "mapas_calor", "mapas_calor.png")
-        dst = os.path.join(run_dir, "figuras", "mapas_calor.png")
-        if os.path.exists(src):
-            shutil.copy2(src, dst)
 
     return stats
 
