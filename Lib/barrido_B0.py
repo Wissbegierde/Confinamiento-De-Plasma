@@ -1,13 +1,13 @@
 """
 barrido_B0.py
 =============
-Semana 11 del cronograma: análisis paramétrico del campo magnético.
+Semana 11 del cronograma: anlisis paramétrico del campo magnético.
 
-Corre la simulación (motor_lite) para una lista de valores de B₀ y genera:
-  - Gráfica τ(B₀)  con barras de error (std)
-  - Gráfica de fracción de partículas confinadas vs. B₀
+Corre la simulación (motor_lite) para una lista de valores de B_0 y genera:
+  - Gráfica t(B_0)  con barras de error (std)
+  - Gráfica de fracción de partículas confinadas vs. B_0
   - CSV con todos los resultados
-  - (Opcional) gráfica de energía cinética para cada B₀
+  - (Opcional) gráfica de energía cinética para cada B_0
 
 Uso
 ---
@@ -36,31 +36,16 @@ from motor_lite   import motor_lite, campo_B_solenoide_vec, campo_E_cero_vec
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURACIÓN DEL BARRIDO  (calibrada con _diagnostico_escalas.py)
 # ══════════════════════════════════════════════════════════════
-#
-# Régimen físico — PROTONES a T=1e4 K, R=1 cm:
-#   v_th = 9084 m/s    t_cruce = R/v_th = 1.1 ms
-#
-#   B0=0.005T → r_L = 18.9 mm > R=10 mm  → ESCAPA  (no confinado)
-#   B0=0.010T → r_L =  9.5 mm ≈ R        → transición
-#   B0=0.050T → r_L =  1.9 mm < R        → CONFINADO magnéticamente
-#   B0=0.200T → r_L =  0.47mm << R       → muy confinado
-#   B0=1.000T → r_L = 0.095mm << R       → muy confinado
-#
-#   dt=1e-8 s  → T_c(B=0.005T)/dt = 6561ns / 10ns = 656 pasos/ciclo  ✓
-#   PASOS=50000 → t_total = 0.5 ms ≈ t_cruce (partículas que escapan, lo hacen)
-#
-#   Colisiones: nu=500 Hz → P_col = 1-exp(-500*1e-8) = 5e-6 /paso (muy baja)
-#   → el campo magnético domina sobre las colisiones: se ve el efecto de B0
 
-# Valores de B₀ a explorar [T]
+# Valores de B a explorar [T]
 B0_VALS = [0.005, 0.008, 0.012, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
 
 # Parámetros de simulación
-N_PARTICULAS  = 40          # partículas por corrida
-PASOS         = 10_000      # pasos  (t_total = 100 µs >> tau_max~9 µs)
-                            # partículas aún confinadas quedan censuradas
-DT            = 1e-8        # [s]  — resuelve T_c en todo el rango B0
-N_SEMILLAS    = 2           # repeticiones para promediar (2 es suficiente)
+N_PARTICULAS  = 40          
+PASOS         = 10_000      
+                            
+DT            = 1e-8        
+N_SEMILLAS    = 2           
 
 # Parámetros físicos  (PROTÓN a T baja)
 M_PARTICULA   = 1.673e-27   # masa protón [kg]
@@ -132,7 +117,7 @@ def _una_corrida(B0, seed):
 
 def correr_barrido():
     """
-    Para cada B₀ en B0_VALS: corre N_SEMILLAS veces y promedia.
+    Para cada B0 en B0_VALS: corre N_SEMILLAS veces y promedia.
     Devuelve (B0s, tau_medios, tau_stds, frac_confs, E_cin_por_B0, te_por_B0)
     """
     tau_medios   = []
@@ -189,8 +174,8 @@ def graficar_barrido(B0s, tau_medios, tau_stds, frac_confs,
                      E_cin_por_B0, te_por_B0, guardar_dir):
     """
     Figura 2x2:
-      [0,0] tau(B0) lineal  — solo datos simulados (sin Bohm), ylim correcto
-      [0,1] tau(B0) log-log — con ajuste de ley de potencia + Bohm
+      [0,0] tau(B0) lineal  - solo datos simulados (sin Bohm), ylim correcto
+      [0,1] tau(B0) log-log - con ajuste de ley de potencia + Bohm
       [1,0] Curvas N_confinadas(t) solapadas para cada B0 (reemplaza fraccion=1)
       [1,1] Energia cinetica normalizada vs. tiempo por B0
     """
@@ -200,7 +185,7 @@ def graficar_barrido(B0s, tau_medios, tau_stds, frac_confs,
     PALETA  = plt.cm.plasma(np.linspace(0.15, 0.9, len(B0s)))
 
     fig = plt.figure(figsize=(14, 10), facecolor=BG)
-    fig.suptitle(f"Efecto del Campo Magnético B₀ sobre el Confinamiento\n"
+    fig.suptitle(f"Efecto del Campo Magnético B0 sobre el Confinamiento\n"
                  f"N={N_PARTICULAS} partículas | {PASOS} pasos | "
                  f"dt={DT:.1e} s | T={T_PLASMA:.0e} K",
                  color="white", fontsize=11, y=0.98)
@@ -223,12 +208,12 @@ def graficar_barrido(B0s, tau_medios, tau_stds, frac_confs,
 
     # ── Panel 0,0 — tau(B0) lineal (solo datos, sin Bohm) ────
     ax0 = fig.add_subplot(gs[0, 0])
-    _ax_style(ax0, f"Tiempo de confinamiento τ vs. B₀",
+    _ax_style(ax0, f"Tiempo de confinamiento t vs. B0",
               "B₀ [T]", f"τ [{ESCALA_KEY}]")
     ax0.errorbar(B0s, tau_plot, yerr=std_plot,
                  fmt='o-', color="#4a9eff", linewidth=1.8,
                  markersize=7, capsize=4, ecolor="#ff6b6b",
-                 label="τ medio ± σ")
+                 label="t medio ± σ")
 
     # Ajuste ley de potencia
     mask = tau_medios > 0
@@ -296,9 +281,8 @@ def graficar_barrido(B0s, tau_medios, tau_stds, frac_confs,
     ax2.legend(fontsize=7, facecolor="#1a1a2e",
                labelcolor="white", framealpha=0.5, ncol=2)
 
-    # ── Panel 1,1 — Energía cinética para cada B₀ ────────────
     ax3 = fig.add_subplot(gs[1, 1])
-    _ax_style(ax3, "Energía cinética normalizada E(t)/E₀",
+    _ax_style(ax3, "Energía cinética normalizada E(t)/E0",
               f"Tiempo [{ESCALA_KEY}]", "E_cin(t) / E_cin(0)")
 
     t_arr = np.arange(PASOS) * DT / factor
@@ -309,7 +293,7 @@ def graficar_barrido(B0s, tau_medios, tau_stds, frac_confs,
             E_norm = E_arr / E_arr[0]
             ax3.plot(t_arr[:len(E_norm)], E_norm,
                      color=PALETA[idx], linewidth=0.9,
-                     alpha=0.85, label=f"B₀={B0:.2f}T")
+                     alpha=0.85, label=f"B0={B0:.2f}T")
 
     ax3.axhline(1.0, color="#555577", linestyle='--', linewidth=0.8)
     ax3.legend(fontsize=6, facecolor="#1a1a2e", labelcolor="white",

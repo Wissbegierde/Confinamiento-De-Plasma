@@ -4,7 +4,7 @@ ui_consola.py — Menús interactivos para configurar una simulación.
 
 from Aplicaciones import (
     ESPECIES, ESCALAS, GEOMETRIAS,
-    pedir_parametros, pedir_campos, pedir_geometria,
+    pedir_parametros, pedir_geometria,
     pedir_escala,
     _float, _int,
 )
@@ -18,48 +18,23 @@ def _mostrar_especies_disponibles():
 
 
 def pedir_especies():
-    """
-    Pregunta solo si usar todas las especies o algunas por nombre.
-    La cantidad por especie se pide una sola vez (mismo N para cada una).
-    """
     print("\n╔══════════════════════════════════════╗")
     print("║   ESPECIES                           ║")
     print("╚══════════════════════════════════════╝")
     _mostrar_especies_disponibles()
-    print("\n  [1] Usar TODAS las especies")
-    print("  [2] Elegir algunas (escribir nombres)")
-    while True:
-        op = input("  Opción [1/2, default=1]: ").strip() or "1"
-        if op in ("1", "2"):
-            break
-        print("  → Opción inválida")
 
-    if op == "1":
-        nombres = list(ESPECIES.keys())
-    else:
-        print("\n  Escribe los nombres separados por espacio o coma.")
-        print("  Ej: proton electron   |   proton, hidrogeno, helio")
-        while True:
-            raw = input("  Especies: ").strip().lower()
-            tokens = [
-                t.strip()
-                for t in raw.replace(",", " ").split()
-                if t.strip()
-            ]
-            invalid = [t for t in tokens if t not in ESPECIES]
-            if tokens and not invalid:
-                nombres = list(dict.fromkeys(tokens))
-                break
-            if invalid:
-                print(f"  → No válidos: {', '.join(invalid)}")
-            else:
-                print("  → Escribe al menos un nombre.")
-
-    n_por = int(_float("  Partículas por especie (ej: 20): ", default=20))
-    conteos = {nombre: n_por for nombre in nombres}
+    print("\n  Cantidad de cada especie (0 = omitir):")
+    conteos = {}
+    for nombre, esp in ESPECIES.items():
+        n = int(_float(f"    {nombre} [{esp['label']}]: ", default=0))
+        if n > 0:
+            conteos[nombre] = n
+    if not conteos:
+        print("  → Ninguna especie con partículas, se usará 20 electrones.")
+        conteos = {"electron": 20}
     n_total = sum(conteos.values())
-    print(f"\n  Especies activas: {', '.join(nombres)}")
-    print(f"  {n_por} por especie → {n_total} partículas en total")
+    activas = ", ".join(f"{k}×{v}" for k, v in conteos.items())
+    print(f"\n  {activas} → {n_total} partículas en total")
     return conteos, n_total
 
 
@@ -124,7 +99,8 @@ def recoger_config() -> dict:
     etiqueta = pedir_etiqueta()
     motor = pedir_motor()
     dt, pasos = pedir_parametros()
-    B0, E0 = pedir_campos()
+    # B0 y E0 los provee main.py a través de pedir_campo_E / pedir_campo_B
+    B0, E0 = 1.0, [0.0, 0.0, 0.0]
     geo = pedir_geometria()
     escala = pedir_escala()
     T_plasma, nu = pedir_plasma()

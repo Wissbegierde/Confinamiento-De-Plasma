@@ -5,11 +5,11 @@ main.py — Punto de entrada del simulador de plasma
 Cada corrida se guarda en su propia carpeta:
 
     data/simulaciones/<run_id>/
-        config.json           ← parámetros completos (reproducible)
-        trayectorias/         ← CSV por partícula
-        montecarlo/           ← stats, decaimiento, gráficas MC
-        figuras/              ← copias de figuras principales
-        mapas_calor/          ← si se pidió
+        config.json           - parámetros completos (reproducible)
+        trayectorias/         - CSV por partícula
+        montecarlo/           - stats, decaimiento, gráficas MC
+        figuras/              - copias de figuras principales
+        mapas_calor/          - si se pidió
 
     data/simulaciones/index.csv   ← índice de todas las corridas
 
@@ -47,6 +47,8 @@ from Aplicaciones import (
     cargar_cache,
     _nombre_cache,
     CACHE_DIR,
+    pedir_campo_E,
+    pedir_campo_B,
 )
 from contenedor import (
     ContenedorCilindrico,
@@ -89,7 +91,7 @@ def _tau_bohm_ref(config: dict) -> float:
     )
 
 
-def ejecutar_pic(config: dict, run_dir: os.PathLike):
+def ejecutar_pic(config: dict, run_dir: os.PathLike, fn_E=None, fn_B=None):
     """Motor PIC con Poisson."""
     run_dir = os.path.abspath(run_dir)
     contenedor = _crear_contenedor(config)
@@ -107,15 +109,19 @@ def ejecutar_pic(config: dict, run_dir: os.PathLike):
     n = config["n_total"]
 
     E0_arr = np.array(E0)
-    fn_E = lambda pos: campos_mod.campo_electrico_constante(pos, E0=E0_arr)
-    if config["geometria"] == "tokamak":
-        fn_B = lambda pos: campos_mod.campo_magnetico_tokamak(
-            pos, B0=B0, R=radio, Bpol=0.1 * B0,
-        )
-    else:
-        fn_B = lambda pos: campos_mod.campo_magnetico_solenoide(
-            pos, B0=B0, radio=radio,
-        )
+    # Usar funciones de campo seleccionadas por el usuario si se pasaron,
+    # sino usar los valores por defecto del config (compatibilidad total)
+    if fn_E is None:
+        fn_E = lambda pos: campos_mod.campo_electrico_constante(pos, E0=E0_arr)
+    if fn_B is None:
+        if config["geometria"] == "tokamak":
+            fn_B = lambda pos: campos_mod.campo_magnetico_tokamak(
+                pos, B0=B0, R=radio, Bpol=0.1 * B0,
+            )
+        else:
+            fn_B = lambda pos: campos_mod.campo_magnetico_solenoide(
+                pos, B0=B0, radio=radio,
+            )
 
     nombre_cache = _nombre_cache(config["geometria"], radio, config["altura"], B0, E0)
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -136,6 +142,8 @@ def ejecutar_pic(config: dict, run_dir: os.PathLike):
         contenedor=contenedor,
         resolucion_grilla=(30, 30, 30),
         registrar_energia=True,
+        fn_E_ext=fn_E,
+        fn_B_ext=fn_B,
     )
     tiempos_escape, E_cin_historia = resultado
     return {
@@ -150,7 +158,7 @@ def ejecutar_pic(config: dict, run_dir: os.PathLike):
     }
 
 
-def ejecutar_lite(config: dict, run_dir: os.PathLike):
+def ejecutar_lite(config: dict, run_dir: os.PathLike, fn_E=None, fn_B=None):
     """Motor vectorizado sin Poisson."""
     contenedor = _crear_contenedor(config)
     dt, pasos = config["dt"], config["pasos"]
@@ -164,26 +172,36 @@ def ejecutar_lite(config: dict, run_dir: os.PathLike):
         nu=config["nu_colision"],
     )
 
-    if config["geometria"] == "tokamak":
-        fn_B = lambda X, b=B0, r=radio: np.array([
-            campos_mod.campo_magnetico_tokamak(x, B0=b, R=r, Bpol=0.1 * b) for x in X
-        ])
+    if fn_B is None:
+        if config["geometria"] == "tokamak":
+            fn_B = lambda X, b=B0, r=radio: np.array([
+                campos_mod.campo_magnetico_tokamak(x, B0=b, R=r, Bpol=0.1 * b) for x in X
+            ])
+        else:
+            fn_B = lambda X, b=B0, r=radio: campo_B_solenoide_vec(X, B0=b, radio=r)
     else:
-        fn_B = lambda X, b=B0, r=radio: campo_B_solenoide_vec(X, B0=b, radio=r)
+        # fn_B viene de pedir_campo_B (pos→B), envolver para motor_lite que espera (X→[B])
+        _fn_B_single = fn_B
+        fn_B = lambda X: np.array([_fn_B_single(x) for x in X])
+    if fn_E is None:
+        fn_E_lite = campo_E_cero_vec
+    else:
+        _fn_E_single = fn_E
+        fn_E_lite = lambda X: np.array([_fn_E_single(x) for x in X])
     print(f"\n  [Lite] Corriendo {pasos} pasos, N={len(particulas)} ...")
     tiempos_escape, E_cin_historia = motor_lite(
         pasos=pasos,
         particulas=particulas,
         motores_colision=motores,
-        fn_E=campo_E_cero_vec,
+        fn_E=fn_E_lite,
         fn_B=fn_B,
         dt=dt,
         contenedor=contenedor,
         registrar_energia=True,
         verbose=True,
     )
-    E0_arr = np.array(config["E0"])
-    fn_E = lambda pos: campos_mod.campo_electrico_constante(pos, E0=E0_arr)
+    # fn_E_lite y fn_B ya contienen los campos seleccionados por el usuario;
+    # se devuelven tal cual para que visualización y guardado los usen correctamente.
     return {
         "particulas": particulas,
         "motores": motores,
@@ -191,7 +209,7 @@ def ejecutar_lite(config: dict, run_dir: os.PathLike):
         "contenedor": contenedor,
         "tiempos_escape": tiempos_escape,
         "E_cin_historia": E_cin_historia,
-        "fn_E": fn_E,
+        "fn_E": fn_E_lite,
         "fn_B": fn_B,
     }
 
@@ -317,10 +335,17 @@ def correr_simulacion(config: dict = None) -> str:
 
     print(f"\n  Carpeta de esta corrida:\n  {run_dir}\n")
 
+    # Selección de campos (nuestro aporte — sin tocar lo del compañero)
+    fn_E, tag_E     = pedir_campo_E()
+    fn_B, B0_real, tag_B = pedir_campo_B(radio=config["radio"])
+    # Actualizar B0 en config si el usuario eligió un campo con B0 explícito
+    if B0_real != 0.0:
+        config["B0"] = B0_real
+
     if config["motor"] == "lite":
-        resultado = ejecutar_lite(config, run_dir)
+        resultado = ejecutar_lite(config, run_dir, fn_E=fn_E, fn_B=fn_B)
     else:
-        resultado = ejecutar_pic(config, run_dir)
+        resultado = ejecutar_pic(config, run_dir, fn_E=fn_E, fn_B=fn_B)
 
     stats = guardar_salidas(config, run_dir, resultado)
 

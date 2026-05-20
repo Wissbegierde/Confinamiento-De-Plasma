@@ -1,7 +1,7 @@
 """
 barrido_nu.py
 =============
-Semana 12 del cronograma: análisis de sensibilidad — variación de la
+Semana 12 del cronograma: análisis de sensibilidad - variación de la
 frecuencia de colisión nu_colision y su efecto en el tiempo de confinamiento.
 
 Genera figura 2x2:
@@ -119,11 +119,11 @@ def barrido():
 
     # Datos para graficar
     nu_arr  = np.array([r["nu"]  for r in resultados])
-    tau_arr = np.array([r["tau"] for r in resultados]) * 1e6  # μs
+    tau_arr = np.array([r["tau"] for r in resultados]) * 1e6  
     std_arr = np.array([r["std"] for r in resultados]) * 1e6
     frac_arr= np.array([r["frac"] for r in resultados])
 
-    # Ajuste ley de potencia τ ∝ ν^α (solo si hay variación suficiente)
+
     try:
         log_nu  = np.log10(nu_arr)
         log_tau = np.log10(tau_arr)

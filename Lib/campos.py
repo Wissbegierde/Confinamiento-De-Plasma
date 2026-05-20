@@ -16,8 +16,8 @@ def campo_electrico_constante(pos, E0=(0.0, 0.0, 0.0)):
 def campo_electrico_radial(pos, E0=1.0, centro=(0.0, 0.0, 0.0)):
     """
     Campo radial que apunta desde/hacia un centro.
-    E0 > 0 → repulsivo (como carga positiva en el centro)
-    E0 < 0 → atractivo
+    E0 > 0 -> repulsivo (como carga positiva en el centro)
+    E0 < 0 -> atractivo
     Útil para: confinamiento radial, trampa de Penning.
     """
     r = pos - np.array(centro)

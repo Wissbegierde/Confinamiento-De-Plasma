@@ -184,10 +184,18 @@ def motor_lite(
         # ── Boris (todo NumPy) ────────────────────────────────
         X_new, V_new = _boris_vec(X, V, E_arr, B_arr, q_a, m_a, dt)
 
+        # FIX: congelar partículas ya escapadas ANTES de frontera y energía.
+        # Boris las procesa igual (todas son (N,3)), pero sobreescribimos sus
+        # resultados para que no deriven ni aporten a E_cin.
+        # Sin esto: E les da velocidad → X_new se aleja de la pared cada paso.
+        if escapo.any():
+            X_new[escapo] = X[escapo]   # posición congelada en la frontera
+            V_new[escapo] = 0.0         # velocidad nula → no aportan a E_cin
+
         # ── Colisiones vectorizadas ───────────────────────────
         if p_col is not None:
             dado      = rng_c.random(N)                        # (N,)
-            col_mask  = dado < p_col                           # (N,) bool
+            col_mask  = (dado < p_col) & ~escapo               # (N,) — excluye escapadas
             if col_mask.any():
                 ruido     = rng_c.normal(0., 1., (N, 3))
                 V_mb      = ruido * sigma

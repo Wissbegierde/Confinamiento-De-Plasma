@@ -1,5 +1,5 @@
 """
-graficar_trayectoria.py — Semana 4 del cronograma.
+graficar_trayectoria.py - Semana 4 del cronograma.
 Lee data/trayectoria_helicoidal.csv, trayectoria_p1.csv, trayectoria_p2.csv
 y genera figura 3D multi-panel.
 """

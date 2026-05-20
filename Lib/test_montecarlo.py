@@ -21,35 +21,17 @@ from particulas import Particula
 from colisiones import ColisionEstocastica, velocidad_inicial_mb
 from contenedor import ContenedorCilindrico, ContenedorEsferico
 from integradores import boris_step
-
-
-# ══════════════════════════════════════════════════════════════
-#  UTILIDADES
-# ══════════════════════════════════════════════════════════════
-
-VERDE  = "\033[92m"
-ROJO   = "\033[91m"
-RESET  = "\033[0m"
-NEGRIT = "\033[1m"
-
-_resultados = []
-
-def ok(nombre):
-    print(f"  {VERDE}OK{RESET}  {nombre}")
-    _resultados.append((nombre, True))
-
-def fallo(nombre, motivo):
-    print(f"  {ROJO}FALLO{RESET}  {nombre}")
-    print(f"       -> {motivo}")
-    _resultados.append((nombre, False))
-
-def afirmar(cond, nombre, detalle=""):
-    if cond:
-        ok(nombre)
-    else:
-        fallo(nombre, detalle or "condición falsa")
-
-
+from motor_lite import motor_lite, campo_B_solenoide_vec, campo_E_cero_vec
+from test_helpers import (
+    NEGRIT,
+    RESET,
+    afirmar,
+    fallo,
+    imprimir_resumen_final,
+    ok,
+    reset_resultados,
+    setup_utf8_stdout_win,
+)
 # ══════════════════════════════════════════════════════════════
 #  BLOQUE 1 — calcular_tau()
 # ══════════════════════════════════════════════════════════════
@@ -211,6 +193,48 @@ def test_motor_escape_simple():
 
 
 # ══════════════════════════════════════════════════════════════
+#  BLOQUE 5b — motor_lite vectorizado (reemplaza _test_motor_lite.py)
+# ══════════════════════════════════════════════════════════════
+
+def test_motor_lite_minimo():
+    print(f"\n{NEGRIT}[5b] motor_lite() vectorizado (smoke){RESET}")
+    N, PASOS, DT = 4, 80, 1e-10
+    RADIO, ALTURA = 0.05, 0.10
+    M, Q = 1.673e-27, 1.602e-19
+    T, NU, B0 = 1e4, 500.0, 0.5
+    rng = np.random.default_rng(0)
+    cont = ContenedorCilindrico(radio=RADIO, altura=ALTURA)
+    particulas, motores = [], []
+    for i in range(N):
+        x0 = cont.posicion_aleatoria(rng)
+        v0 = velocidad_inicial_mb(M, T, rng=rng)
+        p = Particula(i, q=Q, m=M, x0=x0, v0=v0)
+        motores.append(ColisionEstocastica(nu=NU, m=M, T=T, dt=DT, seed=i))
+        particulas.append(p)
+
+    fn_B = lambda X, b=B0, r=RADIO: campo_B_solenoide_vec(X, B0=b, radio=r)
+    te, E_hist = motor_lite(
+        pasos=PASOS,
+        particulas=particulas,
+        motores_colision=motores,
+        fn_E=campo_E_cero_vec,
+        fn_B=fn_B,
+        dt=DT,
+        contenedor=cont,
+        registrar_energia=True,
+        verbose=False,
+        intervalo_log=10000,
+    )
+    afirmar(len(E_hist) > 0, "motor_lite registra energía")
+    afirmar(len(E_hist) <= PASOS, "historia energía ≤ pasos")
+    mc.calcular_tau(te, N, DT, PASOS)  # no debe lanzar
+    ok("calcular_tau con salida de motor_lite")
+    t_arr, N_arr = mc.curva_decaimiento(te, N, DT, PASOS)
+    afirmar(N_arr[0] == N, "N_arr[0] == N")
+    afirmar(np.all(np.diff(N_arr) <= 0), "N_arr no creciente")
+
+
+# ══════════════════════════════════════════════════════════════
 #  BLOQUE 6 — guardar_resultados() crea los CSV
 # ══════════════════════════════════════════════════════════════
 
@@ -248,7 +272,6 @@ def test_guardar_resultados():
 # ══════════════════════════════════════════════════════════════
 #  BLOQUE 7 — graficar_resultados() no lanza excepciones
 # ══════════════════════════════════════════════════════════════
-# ==============================================================
 
 def test_graficar_resultados():
     print(f"\n{NEGRIT}[7] graficar_resultados() sin errores{RESET}")
@@ -288,7 +311,7 @@ def test_graficar_resultados():
         fallo("graficar_resultados()", str(e))
 
 
-# ==============================================================
+# ══════════════════════════════════════════════════════════════
 #  BLOQUE 8 — imprimir_resumen() no lanza excepciones
 # ══════════════════════════════════════════════════════════════
 
@@ -314,14 +337,11 @@ def test_imprimir_resumen():
 # ══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    # Forzar UTF-8 en stdout de Windows (evita UnicodeEncodeError con cp1252)
-    if sys.platform == "win32":
-        import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8",
-                                      errors="replace")
+    setup_utf8_stdout_win()
+    reset_resultados()
 
     print(f"\n{NEGRIT}==========================================={RESET}")
-    print(f"{NEGRIT}  TEST: motor.py + montecarlo.py          {RESET}")
+    print(f"{NEGRIT}  TEST: motor_lite + montecarlo + motor simple {RESET}")
     print(f"{NEGRIT}==========================================={RESET}")
 
     test_calcular_tau()
@@ -329,23 +349,9 @@ if __name__ == "__main__":
     test_curva_decaimiento()
     test_modelos_teoricos()
     test_motor_escape_simple()
+    test_motor_lite_minimo()
     test_guardar_resultados()
     test_graficar_resultados()
     test_imprimir_resumen()
 
-    # Resumen final
-    total    = len(_resultados)
-    pasaron  = sum(1 for _, r in _resultados if r)
-    fallaron = total - pasaron
-
-    print(f"\n  {'=' * 44}")
-    if fallaron == 0:
-        print(f"  {VERDE}{NEGRIT}Todos los tests pasaron ({pasaron}/{total}){RESET}")
-    else:
-        print(f"  {ROJO}{NEGRIT}{fallaron} test(s) fallaron -- {pasaron}/{total} OK{RESET}")
-        print(f"\n  Tests fallidos:")
-        for nombre, r in _resultados:
-            if not r:
-                print(f"    {ROJO}FALLO{RESET} {nombre}")
-    print()
-    sys.exit(0 if fallaron == 0 else 1)
+    imprimir_resumen_final()

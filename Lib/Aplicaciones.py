@@ -1,13 +1,13 @@
 """
 Aplicaciones.py — Main del simulador PIC 3D
 ============================================
-- Selección de especies (electrón, protón, helio, deuterio...)
+- Selección de especies 
 - Selección de geometría del contenedor
-- Caché de campos externos en disco (.npy) → no se recalculan
+- Caché de campos externos en disco (.npy) 
 - Visualización 3D interactiva (sin RecursionError)
   · Slider de progreso
   · Play / Pausa  (Espacio)
-  · Frame a frame  (← →)
+  · Frame a frame  (<- ->)
   · Velocidad      (+ / -)
 """
 
@@ -121,6 +121,114 @@ def _int(msg, minval=0):
         except ValueError:
             print(f"  → Entero ≥ {minval}")
 
+
+# ══════════════════════════════════════════════════════════════
+#  SELECCIÓN DE CAMPO ELÉCTRICO
+# ══════════════════════════════════════════════════════════════
+
+def _vec3(msg):
+    while True:
+        try:
+            v = tuple(float(x) for x in input(msg).split())
+            if len(v) == 3: return v
+        except ValueError:
+            pass
+        print("  → Tres números separados por espacios")
+
+def _menu_op(opciones):
+    for k, v in opciones.items():
+        print(f"    [{k}] {v}")
+    while True:
+        op = input("  → ").strip()
+        if op in opciones: return op
+        print("  → Opción inválida")
+
+def pedir_campo_E():
+    print("\n╔══════════════════════════════════════╗")
+    print("║   CAMPO ELÉCTRICO                    ║")
+    print("╚══════════════════════════════════════╝")
+    op = _menu_op({
+        "1": "Constante uniforme  E = (Ex, Ey, Ez)",
+        "2": "Radial              E ∝ r/r^2  (repulsivo/atractivo)",
+        "3": "Cuadrupolar         E = k·(x, y, -2z)  [trampa de Paul]",
+        "4": "Oscilante en tiempo E = E0·cos(ωt)  [snapshot t=0]",
+        "5": "Dipolar             E de un dipolo puntual",
+        "6": "Lineal en Z         E = dE/dz · z u_z",
+        "7": "Sin campo E",
+    })
+    if op == "1":
+        E0 = np.array(_vec3("  Ex Ey Ez [V/m] (ej: 0 0 0): "))
+        return lambda pos: campos_mod.campo_electrico_constante(pos, E0=E0), "E_cte"
+    elif op == "2":
+        mag = _float("  Magnitud [V/m²] (+ repulsivo | - atractivo, ej: 1e4): ", 1e4)
+        return lambda pos: campos_mod.campo_electrico_radial(pos, E0=mag), "E_radial"
+    elif op == "3":
+        k = _float("  Constante k [V/m²] (ej: 1e4): ", 1e4)
+        return lambda pos: campos_mod.campo_electrico_cuadrupolar(pos, k=k), "E_quad"
+    elif op == "4":
+        E0    = np.array(_vec3("  E0 = Ex Ey Ez [V/m] (ej: 0 0 1e3): "))
+        omega = _float("  Frecuencia ω [rad/s] (ej: 1e6): ", 1e6)
+        return lambda pos: campos_mod.campo_electrico_oscilante(pos, E0=E0, omega=omega, t=0), "E_osc"
+    elif op == "5":
+        p = np.array(_vec3("  Momento dipolar px py pz [C·m] (ej: 0 0 1e-9): "))
+        return lambda pos: campos_mod.campo_electrico_dipolar(pos, p_dipolo=p), "E_dipolar"
+    elif op == "6":
+        dEdz = _float("  dE/dz [V/m²] (ej: 1e3): ", 1e3)
+        return lambda pos: campos_mod.campo_electrico_lineal_z(pos, dEdz=dEdz), "E_linZ"
+    else:
+        return lambda pos: np.zeros(3), "E_cero"
+
+
+# ══════════════════════════════════════════════════════════════
+#  SELECCIÓN DE CAMPO MAGNÉTICO
+# ══════════════════════════════════════════════════════════════
+
+def pedir_campo_B(radio=0.5):
+    print("\n╔══════════════════════════════════════╗")
+    print("║   CAMPO MAGNÉTICO                    ║")
+    print("╚══════════════════════════════════════╝")
+    op = _menu_op({
+        "1": "Solenoide           B uniforme dentro, 0 fuera",
+        "2": "Constante uniforme  B = B0 en dirección arbitraria",
+        "3": "Dipolar magnético   B de dipolo puntual",
+        "4": "Espejo magnético    B(z) = B0·(1 + (Bm-1)·(z/L)²)",
+        "5": "Tokamak             B toroidal + B poloidal",
+        "6": "Cuadrupolar         B = G·(y, x, 0)",
+        "7": "Helicoidal          B = B0·(cos(kz), sin(kz), 0) + Bz ẑ",
+        "8": "Sin campo B",
+    })
+    if op == "1":
+        B0  = _float("  B0 [T] (ej: 1.0): ", 1.0)
+        eje = input("  Eje del solenoide [x/y/z] (ej: z): ").strip() or "z"
+        return lambda pos: campos_mod.campo_magnetico_solenoide(pos, B0=B0, radio=radio, eje=eje), B0, "B_sol"
+    elif op == "2":
+        B0 = _float("  B0 [T] (ej: 1.0): ", 1.0)
+        d  = _vec3("  Dirección dx dy dz (ej: 0 0 1): ")
+        return lambda pos: campos_mod.campo_magnetico_constante(pos, B0=B0, direccion=d), B0, "B_cte"
+    elif op == "3":
+        m = np.array(_vec3("  Momento magnético mx my mz (ej: 0 0 1): "))
+        return lambda pos: campos_mod.campo_magnetico_dipolar(pos, m_dipolo=m), 1.0, "B_dipolar"
+    elif op == "4":
+        B0 = _float("  B0 centro [T] (ej: 1.0): ", 1.0)
+        L  = _float("  Longitud L [m] (ej: 1.0): ", 1.0)
+        Bm = _float("  Factor espejo Bm (ej: 3.0): ", 3.0)
+        return lambda pos: campos_mod.campo_magnetico_espejo(pos, B0=B0, L=L, Bm=Bm), B0, "B_espejo"
+    elif op == "5":
+        B0   = _float("  B0 toroidal [T] (ej: 1.0): ", 1.0)
+        R    = _float("  Radio mayor R [m] (ej: 1.0): ", 1.0)
+        Bpol = _float("  B poloidal [T] (ej: 0.1): ", 0.1)
+        return lambda pos: campos_mod.campo_magnetico_tokamak(pos, B0=B0, R=R, Bpol=Bpol), B0, "B_tokamak"
+    elif op == "6":
+        G = _float("  Gradiente G [T/m] (ej: 1.0): ", 1.0)
+        return lambda pos: campos_mod.campo_magnetico_cuadrupolar(pos, G=G), G, "B_quad"
+    elif op == "7":
+        B0 = _float("  B0 helicoidal [T] (ej: 1.0): ", 1.0)
+        Bz = _float("  Bz axial [T] (ej: 0.5): ", 0.5)
+        k  = _float("  k [rad/m] (ej: 6.28): ", 6.28)
+        return lambda pos: campos_mod.campo_magnetico_helicoidal(pos, B0=B0, Bz=Bz, k=k), B0, "B_helic"
+    else:
+        return lambda pos: np.zeros(3), 0.0, "B_cero"
+
 def pedir_parametros():
     print("\n╔══════════════════════════════════════╗")
     print("║   PARÁMETROS DE SIMULACIÓN           ║")
@@ -229,13 +337,17 @@ if __name__ == "__main__":
     print("╚══════════════════════════════════════╝")
 
     dt, pasos  = pedir_parametros()
-    B0, E0     = pedir_campos()
     geo        = pedir_geometria()
     escala     = pedir_escala()
 
     print("\n  Dimensiones del contenedor:")
     radio  = _float("  Radio  (m) [ej: 0.5]: ", default=0.5)
     altura = _float("  Altura (m) [ej: 1.0]: ", default=1.0)
+
+    # Selección de campos con menú completo
+    fn_E, tag_E        = pedir_campo_E()
+    fn_B, B0, tag_B    = pedir_campo_B(radio=radio)
+    E0                 = (0.0, 0.0, 0.0)  # compatibilidad con mc.tau_bohm
 
     contenedor_map = {
         "cilindro": lambda: ContenedorCilindrico(radio=radio, altura=altura),
@@ -251,15 +363,9 @@ if __name__ == "__main__":
         conteos, contenedor, dt
     )
 
-    # Funciones de campo
-    E0_arr = np.array(E0)
-    fn_E   = lambda pos: campos_mod.campo_electrico_constante(pos, E0=E0_arr)
-    fn_B   = lambda pos: campos_mod.campo_magnetico_solenoide(
-                             pos, B0=B0, radio=radio)
-
     # Rejilla con caché de campos externos
-    nombre_cache = _nombre_cache(geo, radio, altura, B0, E0)
-    print(f"\n  [Config] Preparando rejilla...")
+    nombre_cache = f"{geo}_r{radio:.3f}_h{altura:.3f}_{tag_E}_{tag_B}"
+    print(f"\n  [Config] Preparando rejilla (caché: {nombre_cache})...")
     rejilla = _configurar_rejilla(contenedor, (30, 30, 30), fn_E, fn_B)
 
     if not cargar_cache(rejilla, nombre_cache):
@@ -278,6 +384,8 @@ if __name__ == "__main__":
         contenedor        = contenedor,
         resolucion_grilla = (30, 30, 30),
         registrar_energia = True,   # ← activa registro de E_cin
+        fn_E_ext          = fn_E,   # ← campo seleccionado por el usuario
+        fn_B_ext          = fn_B,   # ← campo seleccionado por el usuario
     )
 
     # motor devuelve (tiempos_escape, E_cin_historia) cuando registrar_energia=True
