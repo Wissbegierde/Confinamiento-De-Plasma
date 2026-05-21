@@ -1,0 +1,423 @@
+% distribuciones_aleatorias.tex
+\documentclass[11pt]{article}
+\usepackage{graphicx}
+\usepackage[tmargin=20mm,bmargin=35mm,lmargin=10mm,rmargin=10mm]{geometry}
+
+\setlength{\columnsep}{0.8cm}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english, spanish, es-noindentfirst, es-tabla]{babel}
+\decimalpoint
+\usepackage{amsmath,amssymb,lmodern,amsfonts}
+\usepackage{bm,latexsym,amssymb,amsfonts,mathrsfs}
+\usepackage{float}
+\usepackage{mathtools}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage{braket}
+\usepackage{multirow}
+\usepackage{tikz}
+\usepackage{verbatim}
+\usepackage{array,booktabs}
+\bibliographystyle{unsrt}
+\usetikzlibrary{arrows, arrows.meta}
+\usetikzlibrary{decorations.pathmorphing}
+\usetikzlibrary{backgrounds}
+\usetikzlibrary{fit}
+\usetikzlibrary{shadows}
+\usetikzlibrary{positioning}
+\usetikzlibrary{babel}
+\usepackage{lastpage}
+\usepackage{titling}
+\usepackage[colorlinks=true,bookmarksopen,bookmarksnumbered,linktocpage]{hyperref}
+
+% Logos: misma convención que la plantilla local
+\newcommand{\trylogo}[2]{\IfFileExists{#1}{\includegraphics[height=1.5cm]{#1}}{#2}}
+
+\title{\textbf{Aleatoriedad y distribuciones en el proyecto}}
+\author{Apunte teórico sobre generación de variables aleatorias}
+\date{\today}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{1.0pt}
+\renewcommand{\footrulewidth}{1.0pt}
+\renewcommand{\footruleskip}{-10pt}
+\setlength{\headheight}{2cm}
+\lhead{\trylogo{../Plantilla_informes/UIS.png}{\trylogo{../Cronograma_Proyecto/UIS.png}{\small UIS}}}
+\chead{Universidad Industrial de Santander\\
+Escuela de Física}
+\rhead{\trylogo{../Plantilla_informes/NewLogo.jpg}{\trylogo{../Cronograma_Proyecto/NewLogo.jpg}{\small ESC}}}
+
+\hypersetup{linkcolor=blue, citecolor=red}
+
+\renewcommand{\thesection}{\Roman{section}}
+\renewcommand{\thesubsection}{\thesection.\Roman{subsection}}
+\hyphenpenalty=10000
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+\noindent
+Se sintetiza el origen teórico de los números aleatorios usados en la simulación:
+el método de la transformada inversa para variables continuas y discretas,
+el muestreo por rechazo para posiciones espaciales en geometrías complejas, el modelo de proceso de
+Poisson para definir la probabilidad de colisión estocástica en cada paso temporal, y
+la distribución de Maxwell--Boltzmann para las velocidades térmicas. Se detalla el proceso paso a paso de cada algoritmo de generación, evitando dependencias de la implementación específica.
+\end{abstract}
+
+\section{Semilla y generador base}
+
+Todo proceso de simulación estocástica parte de un generador de números pseudoaleatorios. A partir de una semilla inicial, un algoritmo determinista produce una secuencia de valores que estadísticamente se comportan como variables independientes con distribución uniforme continua en el intervalo $(0,1)$. Todos los métodos siguientes consisten en aplicar transformaciones matemáticas a estas variables uniformes para obtener muestras de las distribuciones físicas deseadas.
+
+\section{Colisiones estocásticas: Proceso de Poisson}
+
+\subsection{Distribución de probabilidad teórica}
+
+El modelo físico de colisiones supone que los eventos de choque ocurren de forma completamente independiente y a una tasa constante en el tiempo, conocida como frecuencia de colisión $\nu$. Este escenario describe un \textbf{proceso de Poisson homogéneo}.
+
+En un proceso de Poisson, el número de colisiones $N(t)$ que ocurren en un intervalo temporal de longitud $t$ sigue una \textbf{distribución de Poisson}:
+\begin{equation}
+  \mathbb P(N(t) = k) = \frac{(\nu t)^k \mathrm{e}^{-\nu t}}{k!}, \quad k = 0, 1, 2, \dots
+\end{equation}
+
+Una propiedad fundamental de este proceso es que el tiempo $\tau$ que transcurre entre dos colisiones sucesivas es una variable aleatoria continua que sigue una \textbf{distribución exponencial}:
+\begin{equation}
+  \tau \sim \mathrm{Exp}(\nu),\qquad f_\tau(t)=\nu\,\mathrm{e}^{-\nu t}, \quad t\ge 0.
+\end{equation}
+
+\subsection{Método aplicado en la simulación}
+
+Dado que la simulación avanza en pasos de tiempo discretos $\Delta t$, no es eficiente generar el tiempo exacto hasta la próxima colisión para cada partícula, ya que implicaría adelantar el tiempo de forma heterogénea para el ensamble. En su lugar, el enfoque utilizado consiste en preguntarse probabilísticamente: ¿ocurre al menos una colisión durante el paso de tiempo global $\Delta t$?
+
+La probabilidad de que \textbf{no} ocurra ninguna colisión en un intervalo $\Delta t$ es equivalente a que el tiempo hasta la primera colisión sea mayor a $\Delta t$:
+\begin{equation}
+  \mathbb P(N(\Delta t)=0) = \mathbb P(\tau > \Delta t) = \mathrm{e}^{-\nu\Delta t}.
+\end{equation}
+
+Por lo tanto, la probabilidad de que ocurra \textbf{al menos una} colisión (evento que desencadenará la dinámica de choque) es:
+\begin{equation}
+  P_{\mathrm{col}} = 1 - \mathrm{e}^{-\nu\Delta t}.
+\end{equation}
+
+El evento de que una partícula colisione en un paso de tiempo se modela entonces como una variable aleatoria de \textbf{Bernoulli}, que toma el valor $1$ (colisión) con probabilidad $P_{\mathrm{col}}$ y el valor $0$ (no colisión) con probabilidad $1 - P_{\mathrm{col}}$.
+
+\subsection{Proceso paso a paso para la generación}
+
+Para simular este evento estocástico en la práctica, se utiliza el método de la transformada inversa para distribuciones discretas, permitiendo mapear una variable uniforme estándar al resultado binario. El algoritmo empleado paso a paso es el siguiente:
+
+\begin{enumerate}
+    \item \textbf{Cálculo de probabilidad:} Se evalúa la probabilidad teórica de colisión para el paso de tiempo actual, $P_{\mathrm{col}} = 1 - \mathrm{e}^{-\nu\Delta t}$. Este valor se mantiene constante mientras la frecuencia $\nu$ y el $\Delta t$ no cambien.
+    \item \textbf{Generación uniforme:} El generador pseudoaleatorio extrae un número $U$ proveniente de una distribución uniforme estándar, es decir, $U \sim \mathrm{Unif}(0, 1)$.
+    \item \textbf{Comparación y decisión:} Se evalúa la condición matemática de pertenencia al intervalo de probabilidad:
+    \begin{itemize}
+        \item Si $U < P_{\mathrm{col}}$, se determina que \textbf{ocurre} una colisión en este paso.
+        \item Si $U \ge P_{\mathrm{col}}$, se determina que \textbf{no ocurre} ninguna colisión.
+    \end{itemize}
+\end{enumerate}
+
+A continuación, el diagrama ilustra cómo un valor uniforme $U$ generado al azar divide el espacio de resultados, y se transforma efectivamente en el suceso de colisión que requiere el sistema.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[x=8cm, y=1cm, >={Stealth[length=2mm]}]
+        % Eje principal
+        \draw[thick, ->] (-0.1, 0) -- (1.2, 0) node[right] {$U \sim \mathrm{Unif}(0,1)$};
+        
+        % Marcas en 0 y 1
+        \draw[thick] (0, 0.15) -- (0, -0.15) node[below] {$0$};
+        \draw[thick] (1, 0.15) -- (1, -0.15) node[below] {$1$};
+        
+        % Marca de probabilidad P_col
+        \def\Pcol{0.35}
+        \draw[thick, blue] (\Pcol, 0.2) -- (\Pcol, -0.2) node[below] {$P_{\mathrm{col}}$};
+        
+        % Región de colisión
+        \fill[red, opacity=0.2] (0,0) rectangle (\Pcol, 0.4);
+        \node[red!80!black, font=\small, align=center] at (0.175, 0.25) {Colisión \\ ($U < P_{\mathrm{col}}$)};
+        
+        % Región sin colisión
+        \fill[green, opacity=0.2] (\Pcol,0) rectangle (1, 0.4);
+        \node[green!50!black, font=\small, align=center] at (0.675, 0.25) {No hay colisión \\ ($U \ge P_{\mathrm{col}}$)};
+        
+        % Flecha ejemplo de U
+        \draw[->, thick, purple] (0.15, 0.8) node[above] {Valor generado $U$} -- (0.15, 0.1);
+        \draw[->, thick, purple, dashed] (0.8, 0.8) -- (0.8, 0.1);
+    \end{tikzpicture}
+    \caption{Representación del mapeo de un número uniforme $U$ a una variable de Bernoulli. Si el dardo aleatorio $U$ cae en la región roja (cuya longitud corresponde a la probabilidad $P_{\mathrm{col}}$), se acepta la colisión.}
+\end{figure}
+
+
+\section{Distribución espacial: Método del rechazo}
+
+Para situar partículas aleatoriamente dentro de un volumen físico acotado de geometría compleja, no siempre se dispone de una función analítica directa para mapear distribuciones uniformes sin generar sesgos direccionales. En estos casos, se aplica de manera rigurosa el \textbf{método de aceptación y rechazo}.
+
+\subsection{Proceso paso a paso}
+
+El propósito es obtener un vector de posición que sea completamente uniforme dentro de una región espacial arbitraria $K$. El proceso avanza así:
+
+\begin{enumerate}
+  \item \textbf{Caja envolvente:} Se define matemáticamente una región $B$ geométrica simple (típicamente un cubo o prisma rectangular) que contenga en su interior a toda la región $K$.
+  \item \textbf{Generación de coordenadas iniciales:} Para cada eje del espacio, se calcula una coordenada aleatoria independiente utilizando una transformación lineal del tipo $X = a + (b-a)U$. Esto sitúa un punto de prueba $\mathbf{r}$ distribuido de forma uniforme en todo el volumen de la caja envolvente $B$.
+  \item \textbf{Verificación geométrica:} Se sustituye el vector $\mathbf{r}$ en la desigualdad matemática que define la región objetivo $K$.
+  \item \textbf{Aceptación o rechazo del punto:} 
+  \begin{itemize}
+      \item Si la desigualdad es verdadera ($\mathbf{r} \in K$), el punto se \textbf{acepta} como posición final para la partícula.
+      \item Si la desigualdad es falsa ($\mathbf{r} \notin K$), la posición generada se descarta o \textbf{rechaza}. Inmediatamente, el algoritmo repite todo el proceso desde el paso 2 con nuevos números $U$, hasta que se cumpla la condición.
+  \end{itemize}
+\end{enumerate}
+
+La eficiencia temporal de esta técnica es proporcional a la relación de volúmenes de las regiones involucradas, requiriendo en promedio $\mathrm{vol}(B)/\mathrm{vol}(K)$ iteraciones por cada punto aceptado.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[scale=1.2, >={Stealth[length=2mm]}]
+        % Caja contenedora B
+        \draw[thick, dashed, fill=gray!10] (-2, -2) rectangle (2, 2);
+        \node[anchor=north west] at (-2, 2) {Caja contenedora $B$};
+        
+        % Region K (Circulo)
+        \draw[thick, blue, fill=blue!10] (0, 0) circle (1.8cm);
+        \node[blue] at (0, 0.5) {Región objetivo $K$};
+        
+        % Puntos aceptados
+        \fill[green!60!black] (0.5, 0.2) circle (2pt);
+        \node[green!60!black, right] at (0.5, 0.2) {Aceptado};
+        
+        \fill[green!60!black] (-1, -0.8) circle (2pt);
+        \fill[green!60!black] (0.1, -1.2) circle (2pt);
+        \fill[green!60!black] (-1.2, 1.1) circle (2pt);
+        
+        % Puntos rechazados
+        \fill[red] (1.8, 1.7) circle (2pt);
+        \node[red, left] at (1.8, 1.7) {Rechazado};
+        
+        \fill[red] (-1.9, -1.5) circle (2pt);
+        \fill[red] (1.5, -1.6) circle (2pt);
+        \fill[red] (-1.8, 1.2) circle (2pt);
+    \end{tikzpicture}
+    \caption{Método del rechazo en un corte bidimensional. Las posiciones de prueba son uniformes en la región cuadrada externa, y solo las que cumplen la condición de inclusión en el interior del límite curvo se aceptan y pasan a la simulación.}
+\end{figure}
+
+
+\section{Velocidades térmicas: Distribución de Maxwell-Boltzmann}
+
+\subsection{Fundamentos teóricos}
+
+Bajo condiciones de equilibrio térmico, la teoría cinética establece que la velocidad térmica instantánea de un gas sigue la distribución de Maxwell-Boltzmann. Esta es intrínsecamente isotrópica y separable, lo que implica que la velocidad en cada dimensión cartesiana es una variable aleatoria independiente con una distribución \textbf{Normal} o Gaussiana. 
+
+Para un ensamble con temperatura de equilibrio $T$ y partículas de masa $m$, el valor medio de cada componente de velocidad es nulo y su varianza se encuentra dada por:
+\begin{equation}
+  \sigma^2 = \frac{k_{\mathrm B}T}{m}
+\end{equation}
+
+\subsection{Algoritmo para generación de velocidades}
+
+La asignación inicial o pos-colisión del vector de velocidad térmica $\mathbf{v} = (v_x, v_y, v_z)$ se ejecuta directamente sobre el ensamble así:
+
+\begin{enumerate}
+    \item \textbf{Cálculo de desviación estándar:} Se determina la dispersión térmica de las velocidades base: $\sigma = \sqrt{k_{\mathrm B} T / m}$.
+    \item \textbf{Generación Gaussiana estándar:} Se obtienen tres números aleatorios $Z_x, Z_y, Z_z$ a partir de una distribución normal estándar $\mathcal{N}(0, 1)$. En los algoritmos computacionales modernos, estos valores se construyen típicamente utilizando técnicas avanzadas sin evaluación directa de funciones trascendentes costosas (como el algoritmo Ziggurat o similares), aunque todos se alimentan en su base del mismo generador continuo uniforme $(0,1)$.
+    \item \textbf{Escalado térmico:} Las tres componentes estándar se escalan linealmente mediante la varianza térmica y forman el vector físico de velocidad:
+    \begin{equation}
+        v_x = \sigma Z_x, \quad v_y = \sigma Z_y, \quad v_z = \sigma Z_z
+    \end{equation}
+\end{enumerate}
+
+Gracias a la simetría esférica de la distribución normal multivariada conjunta de estas tres variables independientes, la dirección del vector de velocidad queda uniformemente repartida por todo el espacio 3D sólido de forma natural. Simultáneamente, el cuadrado de su magnitud obedecerá la distribución chi-cuadrado con 3 grados de libertad, lo que significa de forma equivalente que su rapidez física $\lVert\mathbf{v}\rVert$ se rige matemáticamente bajo la función de densidad de probabilidad original descrita por Maxwell.
+
+\section{Validación numérica y convergencia}
+
+Para verificar de forma empírica y rigurosa que las rutinas del código generan números aleatorios conformes a las distribuciones físicas detalladas en este documento, se implementó un módulo de validación estadística en \texttt{analisis\_error\_completo.py}. Se generaron conjuntos de muestras de tamaño creciente ($N = 50$, $500$, $5000$ y $50000$) y se compararon con sus respectivas funciones de densidad de probabilidad (PDF) teóricas.
+
+Los resultados visuales se presentan en la Figura~\ref{fig:convergencia_distribuciones}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../../data/validacion/convergencia_distribuciones.png}
+    \caption{Convergencia empírica de las muestras de números aleatorios generadas por la simulación hacia sus PDFs teóricas a medida que aumenta el tamaño muestral $N$. Fila superior: tiempo de colisión exponencial ($\tau \sim \text{Exp}(\nu)$). Fila media: rapidez térmica de Maxwell-Boltzmann. Fila inferior: distribución espacial de radios tras el método de aceptación y rechazo en un disco 2D.}
+    \label{fig:convergencia_distribuciones}
+\end{figure}
+
+\subsection{Análisis de convergencia por distribución}
+
+\begin{enumerate}
+    \item \textbf{Tiempos entre colisiones (Exponencial):} 
+    Para cada tamaño de muestra $N$, se evaluó la concordancia estadística mediante la prueba de Kolmogorov-Smirnov (KS) frente a la función de distribución acumulada (CDF) teórica $F(t) = 1 - \mathrm{e}^{-\nu t}$. El estadístico $D_{KS}$ mide la máxima diferencia vertical entre la CDF empírica y la teórica. Se observa que $D_{KS}$ decrece proporcionalmente a $1/\sqrt{N}$, pasando de $\approx 0.12$ para $N=50$ a valores inferiores a $0.005$ para $N=50000$, con un p-valor que se estabiliza muy por encima de $0.05$, lo que confirma estadísticamente que no es posible distinguir las muestras numéricas de la distribución exponencial teórica.
+    
+    \item \textbf{Rapidez de partículas (Maxwell-Boltzmann):} 
+    La rapidez tridimensional $v = \sqrt{v_x^2 + v_y^2 + v_z^2}$ se construyó a partir de tres normales independientes $\mathcal{N}(0, \sigma_v^2)$. La convergencia hacia la PDF teórica se evaluó calculando el Error Cuadrático Medio Relativo (RMSE) entre el histograma de frecuencias y la PDF continua evaluada en los centros de los intervalos. El error decae de forma sostenida desde $\approx 0.35$ ($N=50$) hasta $< 0.01$ ($N=50000$), mostrando un ajuste visual excelente y libre de sesgos en el ensamble.
+    
+    \item \textbf{Posicionamiento espacial (Uniforme por rechazo):} 
+    El método de aceptación y rechazo para la proyección bidimensional de la grilla cilíndrica (generando en un cuadrado y aceptando en un círculo) predice una distribución teórica del radio $r$ dada por la PDF lineal $f(r) = 2r/R^2$. La discrepancia se midió con el error de norma $L_1$ relativo promedio sobre los intervalos. A medida que $N$ aumenta, las fluctuaciones estadísticas del histograma desaparecen, convergiendo a la recta teórica de pendiente positiva con un error final sumamente bajo ($<0.015$ para $N=50000$).
+\end{enumerate}
+
+Este análisis demuestra cuantitativamente que el generador estocástico de la simulación cumple de manera exacta con el diseño físico-matemático contemplado en el modelamiento teórico.
+
+\section{Análisis de Error y Validación Numérica}
+
+Para validar la rigurosidad y precisión física de la simulación, se realizó un análisis cuantitativo de convergencia y estabilidad numérica en tres componentes críticas del código: el integrador temporal de Boris, los límites de estabilidad ciclotrónica, y el resolvedor de la ecuación de Poisson.
+
+\subsection{Convergencia Temporal: Integrador de Boris}
+
+El método de Boris es un integrador simpléctico/preservador de fase de segundo orden ($\mathcal{O}(\Delta t^2)$). Para verificar experimentalmente su orden de convergencia, se simuló el movimiento de un protón en una región con campos cruzados $\mathbf{E} = (10^3, 0, 0)\,\text{V/m}$ y $\mathbf{B} = (0, 0, 0.5)\,\text{T}$, que induce una trayectoria cicloidal con una deriva $\mathbf{E} \times \mathbf{B}$ en la dirección $-\hat{\mathbf{j}}$ de magnitud teórica:
+\begin{equation}
+  v_D = -\frac{E_x}{B_z} = -2000\,\text{m/s}.
+\end{equation}
+
+La órbita fue integrada durante un tiempo final $T = 1.5 T_c \approx 196.8\,\text{ns}$ (donde $T_c = 2\pi m / (q B_0) \approx 131.23\,\text{ns}$ es el periodo ciclotrónico) variando el paso de tiempo $\Delta t$. Para evitar la pérdida del orden de convergencia por la inicialización desfasada (staggering) propia del algoritmo de Boris, la velocidad inicial se pre-desfasó a $t = -\Delta t/2$ mediante el paso preparatorio:
+\begin{equation}
+  \mathbf{v}_{-1/2} = \mathbf{v}_0 - \frac{\Delta t}{2} \frac{q}{m} \left( \mathbf{E} + \mathbf{v}_0 \times \mathbf{B} \right).
+\end{equation}
+Se midió el error absoluto máximo en la posición final y la fluctuación relativa máxima de la energía total ($E_{\text{total}} = E_{\text{cin}} - q E_x x$). Los resultados se presentan en la Tabla~\ref{tab:conv_temporal} y las curvas de ajuste en la Figura~\ref{fig:conv_temporal}.
+
+\begin{table}[H]
+\centering
+\caption{Errores máximos y orden de convergencia en función de $\Delta t$.}
+\label{tab:conv_temporal}
+\begin{tabular}{cccc}
+\toprule
+$\Delta t$ [ns] & Pasos & Err. Posición [$\mu$m] & Err. Energía [\%] \\
+\midrule
+0.05 & 3936 & $0.00089$ & $0.000092$ \\
+0.10 & 1968 & $0.00356$ & $0.000367$ \\
+0.20 & 984  & $0.01421$ & $0.001467$ \\
+0.50 & 393  & $0.08804$ & $0.009169$ \\
+1.00 & 196  & $0.34684$ & $0.036674$ \\
+2.00 & 98   & $1.36489$ & $0.146698$ \\
+\midrule
+\multicolumn{2}{l}{\textbf{Orden Experimental ($p$)}} & \textbf{1.989} & \textbf{2.000} \\
+\multicolumn{2}{l}{\textbf{Orden Teórico}} & \textbf{2.000} & \textbf{2.000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{../../data/validacion/convergencia_temporal.png}
+    \caption{Análisis de convergencia temporal del integrador de Boris. Izquierda: Error máximo en posición en función de $\Delta t$ mostrando una pendiente experimental de $1.989$ en escala log-log. Derecha: Error relativo máximo en la energía total con una pendiente experimental de $2.000$, confirmando rigurosamente el segundo orden de convergencia ($\mathcal{O}(\Delta t^2)$) del esquema.}
+    \label{fig:conv_temporal}
+\end{figure}
+
+Al ajustar una ley de potencias de la forma $E \propto (\Delta t)^p$ mediante una regresión lineal sobre el logaritmo de los datos, se obtuvieron pendientes de $1.989$ para el error en la trayectoria y de $2.000$ para la energía total. Esto confirma rigurosamente el comportamiento de segundo orden del esquema.
+
+\subsection{Estabilidad Numérica: Límite Ciclotrónico}
+
+Aunque el algoritmo de Boris es incondicionalmente estable en términos del módulo de la velocidad en campos magnéticos uniformes, la física orbital se desvanece si el paso temporal no resuelve adecuadamente la frecuencia ciclotrónica. El límite físico de muestreo de Nyquist exige que se tomen al menos dos muestras por periodo ($\Delta t < T_c / 2 \approx 65.6\,\text{ns}$, o $\omega_c \Delta t < \pi$).
+
+Para ilustrar este límite de estabilidad, se simularon tres regímenes de integración para un giro Larmor puro en $B_0 = 0.5\,\text{T}$, cuyos resultados se muestran en la Figura~\ref{fig:estabilidad_orbita}:
+\begin{enumerate}
+  \item \textbf{Estable y Resuelto ($\Delta t = T_c/20 \approx 6.6\,\text{ns}$):} La trayectoria numérica describe un círculo perfecto superpuesto con la solución analítica.
+  \item \textbf{Estable pero Coarse ($\Delta t = T_c/4 \approx 32.8\,\text{ns}$):} El integrador conserva el radio promedio, pero la órbita se degrada a un polígono cuadrado discreto.
+  \item \textbf{Inestable/Alias ($\Delta t = 0.8 T_c \approx 105.0\,\text{ns}$):} Se viola el criterio de Nyquist, produciendo una órbita completamente distorsionada y no física debido al alias numérico.
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../../data/validacion/estabilidad_orbita.png}
+    \caption{Trayectorias de giro Larmor integradas con Boris bajo tres resoluciones temporales distintas. Izquierda: régimen resuelto ($\Delta t = T_c/20$). Centro: régimen sub-resuelto pero estable ($\Delta t = T_c/4$). Derecha: régimen inestable y distorsionado ($\Delta t = 0.8 T_c$) donde se viola el límite de muestreo de Nyquist.}
+    \label{fig:estabilidad_orbita}
+\end{figure}
+
+\subsection{Convergencia Espacial: Resolvedor de Poisson}
+
+Para evaluar el error espacial introducido por la discretización en diferencias finitas del Resolvedor de Poisson tridimensional ($\nabla^2 \Phi = -\rho/\epsilon_0$), se estableció una caja cúbica de lados $L_x = L_y = L_z = 0.1\,\text{m}$ con paredes conectadas a tierra ($\Phi = 0$ en las fronteras, condiciones de Dirichlet homogéneas). Se depositó una densidad de carga sinusoidal teórica:
+\begin{equation}
+  \rho(x,y,z) = \rho_0 \sin\left(\frac{\pi x}{L_x}\right) \sin\left(\frac{\pi y}{L_y}\right) \sin\left(\frac{\pi z}{L_z}\right)
+\end{equation}
+donde $\rho_0 = 10^{-6}\,\text{C/m}^3$. La solución analítica exacta de esta ecuación es:
+\begin{equation}
+  \Phi_{\text{exacta}}(x,y,z) = \Phi_0 \sin\left(\frac{\pi x}{L_x}\right) \sin\left(\frac{\pi y}{L_y}\right) \sin\left(\frac{\pi z}{L_z}\right)
+\end{equation}
+con la amplitud teórica dada por:
+\begin{equation}
+  \Phi_0 = \frac{\rho_0}{\epsilon_0 \pi^2 \left( L_x^{-2} + L_y^{-2} + L_z^{-2} \right)} \approx 381.74\,\text{V}.
+\end{equation}
+
+Se resolvió el sistema lineal resultante utilizando factorización LU precalculada para diferentes resoluciones de grilla $N^3$. Se calculó el error relativo $L_2$ global sobre los nodos libres del interior, cuyos resultados se tabulan en la Tabla~\ref{tab:conv_espacial} y se grafican en la Figura~\ref{fig:conv_espacial}.
+
+\begin{table}[H]
+\centering
+\caption{Error $L_2$ relativo del resolvedor de Poisson en función del espaciamiento de grilla $h$.}
+\label{tab:conv_espacial}
+\begin{tabular}{cccc}
+\toprule
+Resolución & Nodos Activos & $h$ [mm] & Error $L_2$ Relativo [\%] \\
+\midrule
+$8^3$  & 216   & 14.286 & 1.6955 \\
+$12^3$ & 1000  & 9.091  & 0.6825 \\
+$16^3$ & 2744  & 6.667  & 0.3663 \\
+$20^3$ & 5832  & 5.263  & 0.2281 \\
+$24^3$ & 10648 & 4.348  & 0.1556 \\
+$30^3$ & 21952 & 3.448  & 0.0979 \\
+\midrule
+\multicolumn{3}{l}{\textbf{Orden de Convergencia Espacial ($p$)}} & \textbf{2.006} \\
+\multicolumn{3}{l}{\textbf{Orden Teórico}} & \textbf{2.000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{../../data/validacion/convergencia_espacial.png}
+    \caption{Curva de convergencia espacial del resolvedor de Poisson. La pendiente experimental de la regresión lineal log-log es de $2.006$, en perfecto acuerdo con el orden cuadrático teórico.}
+    \label{fig:conv_espacial}
+\end{figure}
+
+La regresión lineal log-log del error relativo frente a $h$ arrojó una pendiente de $2.006$ (prácticamente igual al valor teórico de $2.000$). Esto demuestra empíricamente que la discretización mediante diferencias finitas centradas de segundo orden funciona según lo predicho por la teoría numérica.
+
+\subsection{Error en Resolvedores Iterativos: Decaimiento Exponencial (Jacobi)}
+
+En resolvedores directos (como la factorización LU empleada en el simulador principal), la ecuación lineal se resuelve de manera exacta en una sola iteración (salvo por el error de redondeo de máquina). Sin embargo, en resolvedores iterativos como el método de Jacobi, Gauss-Seidel o SOR, la aproximación inicial $\Phi^{(0)}$ evoluciona paso a paso hacia la solución algebraica exacta.
+
+La teoría de álgebra lineal numérica dicta que el error en la iteración $k$ decae de manera geométrica o exponencial:
+\begin{equation}
+  E^{(k)} \propto \rho(G)^k = \mathrm{e}^{-k \ln(1/\rho(G))}
+\end{equation}
+donde $\rho(G) < 1$ es el radio espectral de la matriz de iteración de Jacobi. Para una malla tridimensional de $16 \times 16 \times 16$ nodos, el radio espectral teórico es $\rho(G) = \cos(\pi/16) \approx 0.98078$, lo que predice una tasa de amortiguamiento exponencial constante.
+
+Se evaluaron dos métricas de error a lo largo de 1000 iteraciones (o pasos):
+\begin{enumerate}
+  \item \textbf{Residual Relativo ($\|A\Phi^{(k)} - b\| / \|b\|$):} Mide la discrepancia algebraica del sistema discreto. Decae como una exponencial negativa pura ($\mathrm{e}^{-\beta k}$) directamente hasta el límite de precisión de la máquina.
+  \item \textbf{Error $L_2$ Relativo con la solución analítica continua ($\|\Phi^{(k)} - \Phi_{\text{exacta}}\| / \|\Phi_{\text{exacta}}\|$):} Mide el error físico total. Al inicio decae exponencialmente al mismo ritmo que el residual, pero al alcanzar el límite impuesto por el error de discretización espacial de la rejilla ($\sim 0.366\%$ para $N=16$, ver Tabla~\ref{tab:conv_espacial}), se estabiliza (plateau), pues el resolvedor no puede aproximar la física del continuo más allá de la resolución de la malla espacial.
+\end{enumerate}
+
+Los errores obtenidos paso a paso se reportan en la Tabla~\ref{tab:conv_iterativa} y su decaimiento se ilustra en la Figura~\ref{fig:conv_iterativa}.
+
+\begin{table}[H]
+\centering
+\caption{Decaimiento del error y residual en el método de Jacobi en función del número de iteraciones (pasos).}
+\label{tab:conv_iterativa}
+\begin{tabular}{ccc}
+\toprule
+Paso (Iteración) & Residual Relativo [\%] & Error $L_2$ Relativo [\%] \\
+\midrule
+0   & 100.00000 & 100.00000 \\
+100 & 10.97588  & 10.64975  \\
+200 & 1.20470   & 0.84277   \\
+300 & 0.13223   & 0.23363   \\
+400 & 0.01451   & 0.35178   \\
+500 & 0.00159   & 0.36475   \\
+600 & 0.00017   & 0.36617   \\
+700 & 0.00002   & 0.36632   \\
+800 & 0.00000   & 0.36634   \\
+900 & 0.00000   & 0.36634   \\
+1000 & 0.00000  & 0.36634   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../../data/validacion/convergencia_iterativa.png}
+    \caption{Convergencia del resolvedor iterativo de Jacobi. Izquierda: evolución temporal en escala lineal que ilustra la amortiguación del error. Derecha: visualización en escala semilogarítmica donde se aprecia con toda claridad la tasa constante de decaimiento (línea recta) del residual hasta precisión de máquina ($10^{-16}$) y el plateau final del error $L_2$ debido al error sistemático de discretización de la rejilla.}
+    \label{fig:conv_iterativa}
+\end{figure}
+
+Este comportamiento demuestra con alta precisión el decaimiento exponencial del error numérico algebraico, y resalta pedagógicamente la separación física entre el error iterativo (del resolvedor) y el error de discretización (de la grilla).
+
+
+\end{document}

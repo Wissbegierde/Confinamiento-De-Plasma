@@ -1,0 +1,51 @@
+\relax 
+\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\@nameuse{bbl@beforestart}
+\catcode `"\active 
+\catcode `<\active 
+\catcode `>\active 
+\@nameuse{es@quoting}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\bibstyle{unsrt}
+\babel@aux{spanish}{}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Semilla y generador base}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}Colisiones estocásticas: Proceso de Poisson}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {II.I}Distribución de probabilidad teórica}{1}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {II.II}Método aplicado en la simulación}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {II.III}Proceso paso a paso para la generación}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Representación del mapeo de un número uniforme $U$ a una variable de Bernoulli. Si el dardo aleatorio $U$ cae en la región roja (cuya longitud corresponde a la probabilidad $P_{\mathrm  {col}}$), se acepta la colisión.}}{2}{figure.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Distribución espacial: Método del rechazo}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {III.I}Proceso paso a paso}{3}{subsection.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Método del rechazo en un corte bidimensional. Las posiciones de prueba son uniformes en la región cuadrada externa, y solo las que cumplen la condición de inclusión en el interior del límite curvo se aceptan y pasan a la simulación.}}{3}{figure.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Velocidades térmicas: Distribución de Maxwell-Boltzmann}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV.I}Fundamentos teóricos}{3}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV.II}Algoritmo para generación de velocidades}{4}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}Validación numérica y convergencia}{4}{section.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Convergencia empírica de las muestras de números aleatorios generadas por la simulación hacia sus PDFs teóricas a medida que aumenta el tamaño muestral $N$. Fila superior: tiempo de colisión exponencial ($\tau \sim \text  {Exp}(\nu )$). Fila media: rapidez térmica de Maxwell-Boltzmann. Fila inferior: distribución espacial de radios tras el método de aceptación y rechazo en un disco 2D.}}{5}{figure.3}\protected@file@percent }
+\newlabel{fig:convergencia_distribuciones}{{3}{5}{Convergencia empírica de las muestras de números aleatorios generadas por la simulación hacia sus PDFs teóricas a medida que aumenta el tamaño muestral $N$. Fila superior: tiempo de colisión exponencial ($\tau \sim \text {Exp}(\nu )$). Fila media: rapidez térmica de Maxwell-Boltzmann. Fila inferior: distribución espacial de radios tras el método de aceptación y rechazo en un disco 2D}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {V.I}Análisis de convergencia por distribución}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Análisis de Error y Validación Numérica}{6}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI.I}Convergencia Temporal: Integrador de Boris}{6}{subsection.6.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Errores máximos y orden de convergencia en función de $\Delta t$.}}{7}{table.1}\protected@file@percent }
+\newlabel{tab:conv_temporal}{{1}{7}{Errores máximos y orden de convergencia en función de $\Delta t$}{table.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Análisis de convergencia temporal del integrador de Boris. Izquierda: Error máximo en posición en función de $\Delta t$ mostrando una pendiente experimental de $1.989$ en escala log-log. Derecha: Error relativo máximo en la energía total con una pendiente experimental de $2.000$, confirmando rigurosamente el segundo orden de convergencia ($\mathcal  {O}(\Delta t^2)$) del esquema.}}{7}{figure.4}\protected@file@percent }
+\newlabel{fig:conv_temporal}{{4}{7}{Análisis de convergencia temporal del integrador de Boris. Izquierda: Error máximo en posición en función de $\Delta t$ mostrando una pendiente experimental de $1.989$ en escala log-log. Derecha: Error relativo máximo en la energía total con una pendiente experimental de $2.000$, confirmando rigurosamente el segundo orden de convergencia ($\mathcal {O}(\Delta t^2)$) del esquema}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI.II}Estabilidad Numérica: Límite Ciclotrónico}{7}{subsection.6.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Trayectorias de giro Larmor integradas con Boris bajo tres resoluciones temporales distintas. Izquierda: régimen resuelto ($\Delta t = T_c/20$). Centro: régimen sub-resuelto pero estable ($\Delta t = T_c/4$). Derecha: régimen inestable y distorsionado ($\Delta t = 0.8 T_c$) donde se viola el límite de muestreo de Nyquist.}}{8}{figure.5}\protected@file@percent }
+\newlabel{fig:estabilidad_orbita}{{5}{8}{Trayectorias de giro Larmor integradas con Boris bajo tres resoluciones temporales distintas. Izquierda: régimen resuelto ($\Delta t = T_c/20$). Centro: régimen sub-resuelto pero estable ($\Delta t = T_c/4$). Derecha: régimen inestable y distorsionado ($\Delta t = 0.8 T_c$) donde se viola el límite de muestreo de Nyquist}{figure.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI.III}Convergencia Espacial: Resolvedor de Poisson}{8}{subsection.6.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Error $L_2$ relativo del resolvedor de Poisson en función del espaciamiento de grilla $h$.}}{9}{table.2}\protected@file@percent }
+\newlabel{tab:conv_espacial}{{2}{9}{Error $L_2$ relativo del resolvedor de Poisson en función del espaciamiento de grilla $h$}{table.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Curva de convergencia espacial del resolvedor de Poisson. La pendiente experimental de la regresión lineal log-log es de $2.006$, en perfecto acuerdo con el orden cuadrático teórico.}}{9}{figure.6}\protected@file@percent }
+\newlabel{fig:conv_espacial}{{6}{9}{Curva de convergencia espacial del resolvedor de Poisson. La pendiente experimental de la regresión lineal log-log es de $2.006$, en perfecto acuerdo con el orden cuadrático teórico}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI.IV}Error en Resolvedores Iterativos: Decaimiento Exponencial (Jacobi)}{10}{subsection.6.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Decaimiento del error y residual en el método de Jacobi en función del número de iteraciones (pasos).}}{10}{table.3}\protected@file@percent }
+\newlabel{tab:conv_iterativa}{{3}{10}{Decaimiento del error y residual en el método de Jacobi en función del número de iteraciones (pasos)}{table.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Convergencia del resolvedor iterativo de Jacobi. Izquierda: evolución temporal en escala lineal que ilustra la amortiguación del error. Derecha: visualización en escala semilogarítmica donde se aprecia con toda claridad la tasa constante de decaimiento (línea recta) del residual hasta precisión de máquina ($10^{-16}$) y el plateau final del error $L_2$ debido al error sistemático de discretización de la rejilla.}}{11}{figure.7}\protected@file@percent }
+\newlabel{fig:conv_iterativa}{{7}{11}{Convergencia del resolvedor iterativo de Jacobi. Izquierda: evolución temporal en escala lineal que ilustra la amortiguación del error. Derecha: visualización en escala semilogarítmica donde se aprecia con toda claridad la tasa constante de decaimiento (línea recta) del residual hasta precisión de máquina ($10^{-16}$) y el plateau final del error $L_2$ debido al error sistemático de discretización de la rejilla}{figure.7}{}}
+\newlabel{LastPage}{{VI.IV}{11}{Error en Resolvedores Iterativos: Decaimiento Exponencial (Jacobi)}{page.11}{}}
+\gdef\lastpage@lastpage{11}
+\gdef\lastpage@lastpageHy{11}
+\gdef \@abspage@last{11}
